@@ -1,0 +1,71 @@
+/* globals.css */
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-white: #FEFEFE;
+  --color-gray-light: #E0E1E0;
+  --color-primary: #4B2882;
+  --color-secondary: #9C83C4;
+  --color-accent: #FAB900;
+  --color-background: #FEFEFE;
+
+  /* NOVA COR: Para o fundo sutil do submenu */
+  --color-primary-light: #5f3e99;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    @apply m-0 p-0 box-border;
+  }
+
+  html,
+  body {
+    @apply h-full w-full antialiased font-sans;
+    background-color: var(--color-background);
+    color: #1f1f1f;
+  }
+
+  a {
+    @apply no-underline text-inherit;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+
+  input, textarea, select, button {
+    @apply text-gray-900;
+  }
+}
+
+@layer components {
+  .menu-overlay {
+    @apply fixed inset-0 z-40 bg-black/60 backdrop-blur-sm;
+  }
+  .menu-link {
+    @apply flex items-center text-[var(--color-white)] gap-4 p-3 rounded-lg text-lg hover:bg-[var(--color-primary-light)] transition-colors duration-200;
+  }
+  .menu-link.active {
+    @apply bg-[var(--color-primary-light)] text-[var(--color-accent)] font-semibold;
+  }
+
+  .link-underline {
+    @apply relative;
+  }
+
+  .link-underline::after {
+    @apply content-[''] absolute left-0 -bottom-2 w-full h-0.5 bg-[var(--color-accent)] scale-x-0 origin-left transition-transform duration-500;
+  }
+
+  .link-underline:hover::after,
+  .link-underline.link-active::after {
+    @apply scale-x-100;
+  }
+}
+
+
