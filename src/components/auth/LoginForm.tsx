@@ -43,13 +43,19 @@ export function LoginForm() {
 
             router.push("/admin");
         } catch (err) {
+            // Substituímos 'any' por tipagem rigorosa do Axios
             if (axios.isAxiosError(err)) {
-                const msg = (err.response?.data as any)?.message;
-                if (Array.isArray(msg)) setErrorTop(msg.join(" • "));
-                else if (typeof msg === "string") setErrorTop(msg);
-                else setErrorTop("Falha ao entrar. Verifique suas credenciais.");
+                const axiosError = err as AxiosError<NestApiError>;
+                const data = axiosError.response?.data;
+                
+                if (data?.message) {
+                    const msg = data.message;
+                    setErrorTop(Array.isArray(msg) ? msg.join(" • ") : msg);
+                } else {
+                    setErrorTop("Falha ao entrar. Verifique suas credenciais.");
+                }
             } else {
-                setErrorTop("Falha ao entrar. Tente novamente.");
+                setErrorTop("Ocorreu um erro inesperado.");
             }
         } finally {
             setLoading(false);
