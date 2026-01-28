@@ -1,96 +1,105 @@
-'use client';
+"use client";
 
-import { useForm } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import { loginSchema, LoginFormData } from '@/lib/validators/loginSchema';
-import Button from '@/components/ui/Button';
-import Image from 'next/image';
-import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-export default function LoginForm() {
-    const { login } = useAuth();
+import { Button } from "@/components/ui/Button";
 
-    const {
-        register,
-        handleSubmit,
-        formState: { errors, isSubmitting },
-    } = useForm<LoginFormData>({
-        resolver: yupResolver(loginSchema),
-    });
+import axios from "axios";
+import {useAuth} from "@/context/AuthContext";
+import {Input} from "@/components/ui/Inputs";
 
-    const onSubmit = async ({ email, password }: LoginFormData) => {
-        await login(email, password);
-    };
+function isValidEmail(email: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function LoginForm() {
+    const router = useRouter();
+    const { signInWithEmail } = useAuth();
+
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+
+    const [loading, setLoading] = useState(false);
+    const [errorTop, setErrorTop] = useState<string | null>(null);
+    const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+    async function onSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        setErrorTop(null);
+
+        const nextErrors: typeof errors = {};
+        if (!email) nextErrors.email = "Informe seu e-mail.";
+        else if (!isValidEmail(email)) nextErrors.email = "Informe um e-mail válido.";
+
+        if (!password) nextErrors.password = "Informe sua senha.";
+
+        setErrors(nextErrors);
+        if (Object.keys(nextErrors).length) return;
+
+        try {
+            setLoading(true);
+            await signInWithEmail({ email, password });
+
+            router.push("/admin");
+        } catch (err) {
+            if (axios.isAxiosError(err)) {
+                const msg = (err.response?.data as any)?.message;
+                if (Array.isArray(msg)) setErrorTop(msg.join(" • "));
+                else if (typeof msg === "string") setErrorTop(msg);
+                else setErrorTop("Falha ao entrar. Verifique suas credenciais.");
+            } else {
+                setErrorTop("Falha ao entrar. Tente novamente.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    }
 
     return (
-        <div className="w-full max-w-lg mx-auto text-center">
-            <div className="flex justify-center">
-                {/*<Image*/}
-                {/*    src={logoForm}*/}
-                {/*    alt="Logo Traxx"*/}
-                {/*    width={300}*/}
-                {/*    height={300}*/}
-                {/*    priority*/}
-                {/*/>*/}
-            </div>
-
-            <h1 className="text-2xl md:text-3xl font-bold text-[var(--color-primary)] mb-4">
-                Flow+
-            </h1>
-
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                    <input
-                        type="email"
-                        placeholder="E-mail"
-                        className={`w-full p-4 border rounded-lg focus:outline-none focus:ring-2 ${
-                            errors.email
-                                ? 'border-red-500 focus:ring-red-200'
-                                : 'border-gray-300 focus:ring-[var(--color-primary)]/50'
-                        }`}
-                        {...register('email')}
-                    />
-                    {errors.email && (
-                        <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
-                    )}
-                </div>
-
-                <div>
-                    <input
-                        type="password"
-                        placeholder="Senha"
-                        className={`w-full p-4 border rounded-lg focus:outline-none focus:ring-2 ${
-                            errors.password
-                                ? 'border-red-500 focus:ring-red-200'
-                                : 'border-gray-300 focus:ring-[var(--color-primary)]/50'
-                        }`}
-                        {...register('password')}
-                        disabled={isSubmitting}
-                    />
-                    <div className="text-right mt-2">
-                        <Link
-                            href="/esqueceu-sua-senha"
-                            className="text-sm font-semibold text-gray-500 hover:text-[var(--color-primary)]"
-                        >
-                            Esqueceu sua senha?
-                        </Link>
-                    </div>
-                    {errors.password && (
-                        <p className="text-red-500 text-sm mt-1">
-                            {errors.password.message}
-                        </p>
-                    )}
-                </div>
-
-                <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full text-lg !py-4 !rounded-lg disabled:opacity-60 flex items-center justify-center gap-2"
+        <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
+            {errorTop ? (
+                <div
+                    style={{
+                        background: "#FEF2F1",
+                        border: "1px solid #D93025",
+                        color: "#D93025",
+                        padding: 12,
+                        borderRadius: 10,
+                        fontSize: 13,
+                        fontWeight: 600,
+                    }}
                 >
-                    {isSubmitting ? 'Entrando…' : 'ENTRAR'}
-                </Button>
-            </form>
-        </div>
+                    {errorTop}
+                </div>
+            ) : null}
+
+            <Input
+                label="E-mail"
+                placeholder="nome@empresa.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={errors.email}
+                autoComplete="email"
+            />
+
+            <Input
+                label="Senha"
+                placeholder="Digite sua senha"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                error={errors.password}
+                autoComplete="current-password"
+            />
+
+            <Button type="submit" loading={loading}>
+                Entrar
+            </Button>
+
+            <div style={{ textAlign: "center", fontSize: 13, opacity: 0.8 }}>
+                Precisa de acesso? <a href="#" style={{ fontWeight: 700 }}>Fale com o suporte</a>
+            </div>
+        </form>
     );
 }

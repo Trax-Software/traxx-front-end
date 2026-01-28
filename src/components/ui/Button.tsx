@@ -1,26 +1,29 @@
-import { ComponentProps } from 'react';
+"use client";
 
-type ButtonVariant = 'primary' | 'secondary' | 'destructive';
+import React from "react";
 
-interface ButtonProps extends ComponentProps<'button'> {
-    variant?: ButtonVariant;
-}
+type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    loading?: boolean;
+};
 
-export default function Button({ children, className, variant = 'primary', ...props }: ButtonProps) {
-    const baseStyle = "px-6 py-3 font-semibold rounded-md shadow-sm transition-colors duration-200 flex items-center justify-center gap-2";
-
-    const variantStyles: Record<ButtonVariant, string> = {
-        primary: "bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/85",
-        secondary: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400",
-        destructive: "bg-red-600 text-white hover:bg-red-700"
-    };
-
+export function Button({ loading, children, ...props }: Props) {
     return (
         <button
-            className={`${baseStyle} ${variantStyles[variant]} ${className}`}
             {...props}
+            disabled={props.disabled || loading}
+            style={{
+                height: 48,
+                width: "100%",
+                borderRadius: 10,
+                border: 0,
+                color: "white",
+                fontWeight: 700,
+                cursor: props.disabled || loading ? "not-allowed" : "pointer",
+                background: "linear-gradient(135deg, #FD8F06, #990099)",
+                opacity: props.disabled || loading ? 0.7 : 1,
+            }}
         >
-            {children}
+            {loading ? "Entrando..." : children}
         </button>
     );
 }
