@@ -1,45 +1,41 @@
 /* globals.css */
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 :root {
+  /* Cores base do seu Design System */
   --color-white: #FEFEFE;
   --color-gray-light: #E0E1E0;
   --color-primary: #4B2882;
   --color-secondary: #9C83C4;
   --color-accent: #FAB900;
   --color-background: #FEFEFE;
-
-  /* NOVA COR: Para o fundo sutil do submenu */
   --color-primary-light: #5f3e99;
+  
+  /* Definição para corrigir o erro border-border */
+  --border: var(--color-gray-light);
+}
+
+@theme {
+  /* Mapeando as variáveis para classes do Tailwind v4 */
+  --color-brand-primary: var(--color-primary);
+  --color-brand-accent: var(--color-accent);
+  
+  /* Criando a utilidade border-border que estava faltando */
+  --color-border: var(--border);
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui;
 }
 
 @layer base {
-  *,
-  *::before,
-  *::after {
-    @apply m-0 p-0 box-border;
+  *, *::before, *::after {
+    /* Agora o 'border-border' existe no tema acima, então não vai quebrar */
+    @apply m-0 p-0 box-border border-border;
   }
 
-  html,
-  body {
-    @apply h-full w-full antialiased font-sans;
+  html, body {
+    @apply h-full w-full antialiased;
     background-color: var(--color-background);
     color: #1f1f1f;
-  }
-
-  a {
-    @apply no-underline text-inherit;
-  }
-
-  button {
-    @apply cursor-pointer;
-  }
-
-  input, textarea, select, button {
-    @apply text-gray-900;
   }
 }
 
@@ -47,9 +43,11 @@
   .menu-overlay {
     @apply fixed inset-0 z-40 bg-black/60 backdrop-blur-sm;
   }
+  
   .menu-link {
     @apply flex items-center text-[var(--color-white)] gap-4 p-3 rounded-lg text-lg hover:bg-[var(--color-primary-light)] transition-colors duration-200;
   }
+  
   .menu-link.active {
     @apply bg-[var(--color-primary-light)] text-[var(--color-accent)] font-semibold;
   }
@@ -67,5 +65,3 @@
     @apply scale-x-100;
   }
 }
-
-
