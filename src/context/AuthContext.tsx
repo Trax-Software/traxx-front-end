@@ -1,11 +1,12 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import {signIn, SignInPayload} from "@/app/services/auth";
+import {AuthUser, signIn, SignInPayload} from "@/app/services/auth";
 
 
 type AuthContextValue = {
     token: string | null;
+    user: AuthUser | null;
     loading: boolean;
     signInWithEmail: (payload: SignInPayload) => Promise<void>;
     signOut: () => void;
@@ -30,6 +31,7 @@ function getCookie(name: string) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -43,16 +45,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setCookie("trax_token", data.accessToken);
         setToken(data.accessToken);
+        setUser(data.user ?? null);
     }
 
     function signOut() {
         deleteCookie("trax_token");
         setToken(null);
+        setUser(null);
     }
 
     const value = useMemo(
-        () => ({ token, loading, signInWithEmail, signOut }),
-        [token, loading]
+        () => ({ token, user, loading, signInWithEmail, signOut }),
+        [token, user, loading]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

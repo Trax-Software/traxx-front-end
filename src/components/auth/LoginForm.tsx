@@ -5,9 +5,16 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 
-import axios, { AxiosError } from "axios";
+import axios, {AxiosError} from "axios";
 import {useAuth} from "@/context/AuthContext";
 import {Input} from "@/components/ui/Inputs";
+
+type NestApiError = {
+    message?: string;
+    error?: string;
+    statusCode?: number;
+    [k: string]: unknown;
+};
 
 function isValidEmail(email: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -43,14 +50,13 @@ export function LoginForm() {
 
             router.push("/admin");
         } catch (err) {
+            // Substituímos 'any' por tipagem rigorosa do Axios
             if (axios.isAxiosError(err)) {
-                // Agora o TypeScript reconhece o AxiosError e a interface global NestApiError
                 const axiosError = err as AxiosError<NestApiError>;
                 const data = axiosError.response?.data;
                 
                 if (data?.message) {
                     const msg = data.message;
-                    // Trata erro de validação (array) ou erro simples (string)
                     setErrorTop(Array.isArray(msg) ? msg.join(" • ") : msg);
                 } else {
                     setErrorTop("Falha ao entrar. Verifique suas credenciais.");
