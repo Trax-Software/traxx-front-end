@@ -39,6 +39,13 @@ function parseError(err: unknown): string {
   return "Falha ao entrar. Tente novamente.";
 }
 
+type NestApiError = {
+    message?: string;
+    error?: string;
+    statusCode?: number;
+    [k: string]: unknown;
+};
+
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }

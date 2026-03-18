@@ -5,6 +5,7 @@ import { signIn, SignInPayload } from "@/app/services/auth";
 
 type AuthContextValue = {
     token: string | null;
+    user: AuthUser | null;
     loading: boolean;
     signInWithEmail: (payload: SignInPayload) => Promise<void>;
     signOut: () => void;
@@ -41,6 +42,7 @@ function isValidJwt(value: string | undefined): value is string {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -67,16 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setCookie(AUTH_COOKIE, data.accessToken);
         setToken(data.accessToken);
+        setUser(data.user ?? null);
     }
 
     function signOut() {
         deleteCookie(AUTH_COOKIE);
         setToken(null);
+        setUser(null);
     }
 
     const value = useMemo(
-        () => ({ token, loading, signInWithEmail, signOut }),
-        [token, loading]
+        () => ({ token, user, loading, signInWithEmail, signOut }),
+        [token, user, loading]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
