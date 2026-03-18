@@ -9,14 +9,29 @@ export const api = axios.create({
     },
 });
 
+// ── Interceptor de REQUEST: injeta o JWT ──────────────────────────────────────
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     if (typeof window !== "undefined") {
         const token = getClientCookie("trax_token");
-
         if (token && config.headers) {
-            // Removemos o 'as any' e usamos a interface correta do Axios
             config.headers.Authorization = `Bearer ${token}`;
         }
     }
     return config;
+});
+
+// ── Interceptor de RESPONSE: desembrulha o envelope do TransformInterceptor ──
+// O NestJS globalInterceptor envolve todas as respostas em:
+// { data: T, meta: { timestamp, path } }
+// Com este interceptor, todos os services recebem T diretamente (transparente).
+api.interceptors.response.use((response) => {
+    if (
+        response.data &&
+        typeof response.data === "object" &&
+        "data" in response.data &&
+        "meta" in response.data
+    ) {
+        response.data = response.data.data;
+    }
+    return response;
 });

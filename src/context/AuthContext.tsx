@@ -1,8 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import {signIn, SignInPayload} from "@/app/services/auth";
-
+import { signIn, SignInPayload } from "@/app/services/auth";
 
 type AuthContextValue = {
     token: string | null;
@@ -10,6 +9,8 @@ type AuthContextValue = {
     signInWithEmail: (payload: SignInPayload) => Promise<void>;
     signOut: () => void;
 };
+
+const AUTH_COOKIE = "trax_token";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -22,10 +23,20 @@ function deleteCookie(name: string) {
     document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; samesite=lax`;
 }
 
-function getCookie(name: string) {
+function getRawCookie(name: string): string | undefined {
     if (typeof document === "undefined") return undefined;
     const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return match ? match[1] : undefined;
+    return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+/**
+ * Valida se o token parece um JWT real (3 segmentos base64 separados por ponto).
+ * Evita que cookies corrompidos (ex: "undefined") sejam usados como token.
+ */
+function isValidJwt(value: string | undefined): value is string {
+    if (!value || value === "undefined" || value === "null") return false;
+    const parts = value.split(".");
+    return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -33,20 +44,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const t = getCookie("trax_token");
-        if (t) setToken(decodeURIComponent(t));
+        const raw = getRawCookie(AUTH_COOKIE);
+
+        if (isValidJwt(raw)) {
+            setToken(raw);
+        } else if (raw) {
+            // Cookie existe mas é inválido (ex: "undefined") → limpa automaticamente
+            const preview = String(raw).substring(0, 20);
+            console.warn("[Auth] Cookie inválido detectado e removido:", preview);
+            deleteCookie(AUTH_COOKIE);
+        }
+
         setLoading(false);
     }, []);
 
     async function signInWithEmail(payload: SignInPayload) {
         const data = await signIn(payload);
 
-        setCookie("trax_token", data.accessToken);
+        if (!data?.accessToken) {
+            throw new Error("Resposta da API inválida: token não recebido.");
+        }
+
+        setCookie(AUTH_COOKIE, data.accessToken);
         setToken(data.accessToken);
     }
 
     function signOut() {
-        deleteCookie("trax_token");
+        deleteCookie(AUTH_COOKIE);
         setToken(null);
     }
 

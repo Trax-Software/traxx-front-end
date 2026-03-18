@@ -1,20 +1,18 @@
-import './globals.css'
-import {ReactNode} from 'react'
-import {AuthProvider} from "@/context/AuthContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeProvider";
+import { ReactNode } from 'react';
+import './globals.css';
 
-
-export default function RootLayout({children}: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
     return (
-        <>
-            <html lang="pt-BR">
-            <body className="min-h-screen">
+        <html lang="pt-BR">
+        <body>
+        <ThemeProvider>
             <AuthProvider>
-                <main>
-                    {children}
-                </main>
+                {children}
             </AuthProvider>
-            </body>
-            </html>
-        </>
+        </ThemeProvider>
+        </body>
+        </html>
     )
 }
