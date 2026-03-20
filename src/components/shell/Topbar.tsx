@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { usePathname } from "next/navigation";
 
 type TopbarProps = {
   title: string;
@@ -6,11 +9,22 @@ type TopbarProps = {
 };
 
 export default function Topbar({ title, userName = "Murilo" }: TopbarProps) {
+  const pathname = usePathname();
+  const routeTitleMap: Array<{ prefix: string; title: string }> = [
+    { prefix: "/admin/dna", title: "DNA da Marca" },
+    { prefix: "/admin/assistant", title: "Assistente" },
+    { prefix: "/admin/assets", title: "Assets" },
+    { prefix: "/admin", title: "Campanhas" },
+  ];
+
+  const resolvedTitle =
+    routeTitleMap.find((item) => pathname.startsWith(item.prefix))?.title ?? title;
+
   return (
     <header className="flex flex-col gap-3 px-6 pt-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-main)]">
-          {title}
+          {resolvedTitle}
         </h1>
         <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-xs font-semibold text-[var(--success-text)]">
           <span className="h-2 w-2 rounded-full bg-[var(--success-text)]" />

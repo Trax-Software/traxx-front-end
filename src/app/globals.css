@@ -16,6 +16,7 @@
   --color-primary-light: #5f3e99;
 }
 
+[data-theme="light"],
 [data-theme="dashboard"] {
   --brand-orange: #FD8F06;
   --brand-magenta: #990099;
@@ -44,6 +45,7 @@
   --shadow-brand: 0 10px 15px -3px rgba(253, 143, 6, 0.2), 0 4px 6px -2px rgba(253, 143, 6, 0.1);
 }
 
+[data-theme="dark"],
 [data-theme="dashboard"][data-mode="dark"] {
   --bg-body: #0B0E14;
   --bg-surface: #161B22;
@@ -118,4 +120,3 @@
     @apply scale-x-100;
   }
 }
-

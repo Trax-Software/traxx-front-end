@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTheme } from "@/contexts/theme-context";
 
 const navItems = [
   { label: "Campanhas", href: "/admin", icon: "grid" },
@@ -61,6 +62,7 @@ function NavIcon({ type, className }: NavIconProps) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin" || pathname === "/admin/";
@@ -115,6 +117,38 @@ export default function Sidebar() {
         </div>
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
           <div className="h-full w-[98%] rounded-full bg-[var(--success-text)]" />
+        </div>
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] p-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+          Tema
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setTheme("dark")}
+            className={
+              theme === "dark"
+                ? "rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-semibold text-[var(--brand-orange)]"
+                : "rounded-md border border-transparent bg-[var(--bg-surface)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+            }
+            aria-pressed={theme === "dark"}
+          >
+            Escuro
+          </button>
+          <button
+            type="button"
+            onClick={() => setTheme("light")}
+            className={
+              theme === "light"
+                ? "rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-semibold text-[var(--brand-orange)]"
+                : "rounded-md border border-transparent bg-[var(--bg-surface)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+            }
+            aria-pressed={theme === "light"}
+          >
+            Claro
+          </button>
         </div>
       </div>
     </aside>

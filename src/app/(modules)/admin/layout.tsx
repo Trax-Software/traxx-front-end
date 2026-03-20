@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/shell/AppShell";
+<<<<<<< Updated upstream
 
 const AUTH_COOKIE = "trax_token";
 
@@ -17,4 +18,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <AppShell title="Campanhas">{children}</AppShell>
         </div>
     );
+=======
+
+const AUTH_COOKIE = "trax_token";
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(AUTH_COOKIE)?.value;
+
+    if (!token) {
+        redirect("/login");
+    }
+
+    return <AppShell title="Campanhas">{children}</AppShell>;
+>>>>>>> Stashed changes
 }
