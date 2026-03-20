@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Brand Identity</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* --- PALETA DE CORES DA EMPRESA --- */
+            --brand-orange: #FD8F06;
+            --brand-magenta: #990099;
+            --brand-gradient: linear-gradient(135deg, var(--brand-orange) 0%, var(--brand-magenta) 100%);
+
+            /* --- DARK THEME ADJUSTMENTS --- */
+            --bg-body: #0B0E14;
+            --bg-surface: #161B22;
+            --border: #30363D;
+
+            --text-main: #F0F6FC;
+            --text-secondary: #8B949E;
+
+            /* Magenta Suavizado (Refinado) */
+            --magenta-subtle: rgba(153, 0, 153, 0.12);
+            --magenta-text: #D166D1;
+
+            /* Laranja Suavizado */
+            --orange-light: rgba(253, 143, 6, 0.1);
+
+            /* Status Dark */
+            --success-bg: rgba(63, 185, 80, 0.15);
+            --success-text: #3FB950;
+            --warning-bg: var(--orange-light);
+            --warning-text: var(--brand-orange);
+
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+            --shadow-brand: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+
+        /* --- Sidebar --- */
+        aside {
+            width: 260px; background: var(--bg-surface); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; padding: 24px; justify-content: space-between;
+        }
+        .logo { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.2rem; margin-bottom: 40px; color: var(--text-main); }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: var(--brand-gradient);
+            border-radius: 10px; box-shadow: var(--shadow-brand);
+        }
+        .nav-group h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin: 24px 0 12px 0; }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: var(--text-secondary);
+            text-decoration: none; border-radius: 8px; transition: all 0.2s ease; font-weight: 500; margin-bottom: 4px;
+        }
+        .nav-item:hover { background-color: var(--bg-body); color: var(--brand-orange); }
+        .nav-item.active { background-color: var(--orange-light); color: var(--brand-orange); font-weight: 600; border: 1px solid rgba(253, 143, 6, 0.2); }
+        .nav-item i { font-size: 1.25rem; }
+
+        .signal-box { background: var(--bg-body); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); }
+        .signal-header { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px;}
+        .progress-bar { height: 6px; background: var(--border); border-radius: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 10px; }
+
+        /* --- Main Content --- */
+        main { flex: 1; padding: 32px; overflow-y: auto; display: grid; grid-template-columns: 2.5fr 1fr; gap: 32px; }
+        header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .breadcrumbs h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; }
+        .user-profile { display: flex; align-items: center; gap: 12px; background: var(--bg-surface); padding: 6px 12px 6px 6px; border: 1px solid var(--border); border-radius: 50px; }
+        .avatar { width: 32px; height: 32px; background: var(--brand-gradient); border-radius: 50%; border: 2px solid var(--bg-surface);}
+
+        .content-area { display: flex; flex-direction: column; gap: 24px; }
+
+        .toolbar {
+            display: flex; gap: 16px; background: var(--bg-surface); padding: 16px;
+            border-radius: var(--radius-lg); border: 1px solid var(--border); align-items: center; box-shadow: var(--shadow-sm);
+        }
+        .search-box { flex: 1; position: relative; }
+        .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary);}
+        .search-box input {
+            width: 100%; padding: 12px 12px 12px 42px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--bg-body); outline: none; transition: all 0.2s; color: white;
+        }
+        .search-box input:focus { border-color: var(--brand-orange); background: #0d1117; }
+
+        .filter-tabs { display: flex; gap: 4px; background: var(--bg-body); padding: 4px; border-radius: 10px; border: 1px solid var(--border);}
+        .tab { padding: 8px 16px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; color: var(--text-secondary); font-weight: 600; transition: all 0.2s;}
+        .tab.active { background: var(--bg-surface); color: var(--brand-orange); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+
+        .btn-primary {
+            background: var(--brand-orange);
+            color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(253, 143, 6, 0.2); position: relative; overflow: hidden; z-index: 1;
+        }
+        .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.1); }
+
+        .campaign-list { display: flex; flex-direction: column; gap: 16px; }
+        .campaign-card {
+            background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+            padding: 20px; display: grid; grid-template-columns: 48px 2fr 1fr 1fr 0.5fr; align-items: center;
+            gap: 16px; transition: all 0.2s;
+        }
+        .campaign-card:hover { border-color: var(--brand-orange); }
+        .platform-icon {
+            width: 48px; height: 48px; background: var(--bg-body); border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+        }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+        .status-success { background: var(--success-bg); color: var(--success-text); }
+        .status-warning { background: var(--warning-bg); color: var(--warning-text); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+        /* AI Widget - Dark Refined */
+        .ai-widget {
+            background: linear-gradient(160deg, var(--bg-surface), var(--magenta-subtle));
+            border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; position: relative;
+        }
+        .ai-widget::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--brand-magenta); border-radius: 4px 0 0 4px;}
+        .ai-title { font-weight: 800; display: flex; gap: 8px; align-items: center; color: var(--magenta-text); font-size: 1.1rem;}
+        .step { display: flex; gap: 12px; align-items: center; opacity: 0.6; margin-top: 16px; color: var(--text-main); }
+        .step.active { opacity: 1; font-weight: 600; color: var(--magenta-text); }
+        .step-icon { width: 28px; height: 28px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; color: white;}
+        .step.active .step-icon { background: var(--brand-magenta); box-shadow: 0 0 10px rgba(153, 0, 153, 0.3); }
+        .step.done .step-icon { background: var(--success-text); }
+
+        /* --- Stats area --- */
+        .stat-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
+        .stat-header { color: var(--text-secondary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;}
+        .stat-value { font-size: 2.8rem; font-weight: 800; color: #FFF; line-height: 1; margin-bottom: 16px; }
+        .bar { width: 8px; background: var(--border); border-radius: 2px; }
+        .bar.main { background: var(--brand-orange); box-shadow: 0 0 8px rgba(253, 143, 6, 0.3); }
+    </style>
+</head>
+<body>
+
+<aside>
+    <div>
+        <div class="logo">
+            <div class="logo-icon"></div> <span>Trax.OS</span>
+        </div>
+        <nav>
+            <div class="nav-group">
+                <h3>Navegação</h3>
+                <a href="#" class="nav-item active"><i class="ph-fill ph-squares-four"></i> Campanhas</a>
+                <a href="#" class="nav-item"><i class="ph-fill ph-fingerprint"></i> DNA da Marca</a>
+                <a href="#" class="nav-item"><i class="ph-fill ph-robot"></i> Assistente</a>
+                <a href="#" class="nav-item"><i class="ph-fill ph-image"></i> Assets</a>
+            </div>
+        </nav>
+    </div>
+    <div class="signal-box">
+        <div class="signal-header">
+            <span style="font-weight:700;">Sinal do Sistema</span>
+            <span style="color: var(--success-text); font-weight:600;">98%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 98%; background: var(--success-text);"></div>
+        </div>
+    </div>
+</aside>
+
+<main>
+    <header>
+        <div class="breadcrumbs">
+            <h1>Campanhas</h1>
+        </div>
+        <div class="user-profile">
+            <div class="avatar"></div> <div style="font-size: 0.9rem; padding: 0 8px;"><strong>Murilo</strong></div>
+            <i class="ph ph-caret-down"></i>
+        </div>
+    </header>
+
+    <div class="content-area">
+        <div class="toolbar">
+            <div class="search-box">
+                <i class="ph ph-magnifying-glass"></i>
+                <input type="text" placeholder="Buscar campanhas...">
+            </div>
+            <div class="filter-tabs">
+                <div class="tab active">Todas</div>
+                <div class="tab">Em andamento</div>
+                <div class="tab">Concluídas</div>
+            </div>
+            <button class="btn-primary">
+                <i class="ph-bold ph-plus"></i> Nova Campanha
+            </button>
+        </div>
+
+        <div class="campaign-list">
+            <div class="campaign-card">
+                <div class="platform-icon" style="color: #58a6ff; background: rgba(88, 166, 255, 0.1)"><i class="ph-fill ph-meta-logo"></i></div>
+                <div>
+                    <h4 style="font-weight: 700; font-size: 1.05rem;">Pipeline Q1 — Retargeting</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">Público: Leads quentes</p>
+                </div>
+                <div><span class="status-badge status-success"><div class="dot"></div> Concluída</span></div>
+                <div style="text-align: right; font-size: 0.9rem; color: var(--text-secondary);">Hoje, 09:12</div>
+                <i class="ph ph-dots-three-outline-vertical" style="color: var(--text-secondary); cursor: pointer;"></i>
+            </div>
+
+            <div class="campaign-card">
+                <div class="platform-icon" style="color: #f85149; background: rgba(248, 81, 73, 0.1)"><i class="ph-fill ph-google-logo"></i></div>
+                <div>
+                    <h4 style="font-weight: 700; font-size: 1.05rem;">Lançamento — Intro ao TR</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">Objetivo: Awareness</p>
+                </div>
+                <div>
+                    <span class="status-badge status-warning"><div class="dot"></div> Gerando...</span>
+                </div>
+                <div style="text-align: right; font-size: 0.9rem; color: var(--text-secondary);">Hoje, 08:47</div>
+                <i class="ph ph-dots-three-outline-vertical" style="color: var(--text-secondary); cursor: pointer;"></i>
+            </div>
+        </div>
+
+        <div class="ai-widget">
+            <div class="ai-title">
+                <i class="ph-fill ph-sparkle"></i> IA em Processamento
+            </div>
+            <div class="step done">
+                <div class="step-icon"><i class="ph-bold ph-check"></i></div>
+                <span>Validando contexto...</span>
+            </div>
+            <div class="step active">
+                <div class="step-icon"><i class="ph-fill ph-cpu"></i></div>
+                <span>Gerando variações de criativos (Step 2/3)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-area">
+        <div class="stat-card">
+            <div class="stat-header">Campanhas Criadas (Mensal)</div>
+            <div style="display: flex; align-items: flex-end; justify-content: space-between;">
+                <div class="stat-value">12</div>
+                <div style="display: flex; align-items: flex-end; gap: 4px; height: 40px;">
+                    <div class="bar" style="height: 40%"></div>
+                    <div class="bar" style="height: 60%"></div>
+                    <div class="bar" style="height: 30%"></div>
+                    <div class="bar main" style="height: 100%"></div>
+                </div>
+            </div>
+            <div style="color: var(--success-text); font-weight: 600; font-size: 0.9rem; margin-top: 10px;"><i class="ph-fill ph-trend-up"></i> +3 vs anterior</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">Assets Gerados</div>
+            <div class="stat-value" style="color: var(--magenta-text)">148</div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: 75%; background: var(--brand-magenta); box-shadow: 0 0 10px rgba(153, 0, 153, 0.4);"></div>
+            </div>
+            <div style="margin-top: 12px; font-size: 0.9rem; color: var(--text-secondary);">Produção dentro da meta</div>
+        </div>
+    </div>
+</main>
+</body>
+</html>
