@@ -15,6 +15,7 @@ import {
   Campaign, StrategyOption,
   brainstormStrategy, deleteCampaign, getCampaign, updateCampaign,
 } from "@/app/services/campaigns";
+import { generateCampaignImage } from "@/app/services/ai";
 import {
   ArrowLeft, Calendar, CheckCircle, DollarSign, Edit3, FileText, 
   Image as ImageIcon, Link as LinkIcon, Megaphone, Package,
@@ -225,6 +226,8 @@ export default function CampaignDetailPage() {
   const [selectedIdx, setSelectedIdx]   = useState<number | null>(null);
   const [strategySaving, setStrategySaving] = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [imagePrompt, setImagePrompt]   = useState("");
 
   // ── Carregamento ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -273,6 +276,33 @@ export default function CampaignDetailPage() {
   // ── Gerar novamente ─────────────────────────────────────────────────────────
   function handleRegenerateBrainstorm() {
     setStrategies([]); setSelectedIdx(null); setError(null);
+  }
+
+  // ── Gerar Imagem com IA ─────────────────────────────────────────────────────
+  async function handleGenerateImage() {
+    if (!campaign || !imagePrompt.trim()) {
+      setError("Digite uma descrição para a imagem.");
+      return;
+    }
+    setGeneratingImage(true);
+    setError(null);
+    try {
+      const result = await generateCampaignImage({
+        prompt: imagePrompt,
+        campaignId: id,
+      });
+      setImagePrompt("");
+      setError(null);
+      alert(`Imagem em processamento! Job ID: ${result.jobId}\n\nA imagem será gerada em background e aparecerá nos criativos em alguns segundos.`);
+      
+      setTimeout(() => {
+        getCampaign(id).then(setCampaign);
+      }, 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Erro ao gerar imagem. Verifique seus créditos.");
+    } finally {
+      setGeneratingImage(false);
+    }
   }
 
   // ── Delete ──────────────────────────────────────────────────────────────────
@@ -361,20 +391,20 @@ export default function CampaignDetailPage() {
       <StatusTimeline current={c.status} />
 
       {/* ── Painel de Ação Contextual por Status ───────────────────────────────── */}
-      {c.status === "GENERATING_ASSETS" && (
+      {c.status === "DRAFT" && (
         <div className="animate-fade-slide" style={{
-          background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)",
+          background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
           borderRadius: 14, padding: "16px 20px", marginBottom: 24,
           display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Zap size={18} color="#3b82f6" />
+            <Sparkles size={18} color="#8b5cf6" />
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                Criativos prontos?
+                Campanha criada com sucesso!
               </p>
               <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
-                Clique para marcar a campanha como concluída e pronta para publicação.
+                Use a IA para gerar estratégias ou pule direto para concluir a campanha.
               </p>
             </div>
           </div>
@@ -383,10 +413,116 @@ export default function CampaignDetailPage() {
               const updated = await updateCampaign(id, { status: "COMPLETED" });
               setCampaign(updated);
             }}
-            className="btn-primary"
+            className="btn-ghost"
+            style={{ fontSize: 13 }}
           >
-            <CheckCircle size={14} /> Marcar como Concluída
+            <CheckCircle size={14} /> Pular para Concluída
           </button>
+        </div>
+      )}
+
+      {c.status === "GENERATING_ASSETS" && (
+        <div className="animate-fade-slide" style={{ marginBottom: 24 }}>
+          <div style={{
+            background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)",
+            borderRadius: 14, padding: "16px 20px", marginBottom: 16,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <Zap size={18} color="#3b82f6" />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                  Estratégia aplicada! Próximo passo: Criativos
+                </p>
+                <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
+                  Gere imagens com IA ou adicione manualmente. Quando estiver pronto, marque como concluída.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ 
+              background: "var(--bg-surface)", 
+              borderRadius: 10, 
+              padding: 14,
+              border: "1px solid var(--border)",
+            }}>
+              <label style={{ 
+                fontSize: 12, 
+                fontWeight: 600, 
+                color: "var(--text-secondary)", 
+                display: "block",
+                marginBottom: 8,
+              }}>
+                <ImageIcon size={13} style={{ display: "inline", marginRight: 4 }} />
+                Descreva a imagem que deseja gerar
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="text"
+                  value={imagePrompt}
+                  onChange={(e) => setImagePrompt(e.target.value)}
+                  placeholder="Ex: Produto em fundo minimalista, iluminação profissional, alta qualidade..."
+                  style={{
+                    flex: 1,
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-surface-2)",
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleGenerateImage()}
+                />
+                <button
+                  onClick={handleGenerateImage}
+                  disabled={generatingImage || !imagePrompt.trim()}
+                  className="btn-primary"
+                  style={{ 
+                    whiteSpace: "nowrap",
+                    opacity: generatingImage || !imagePrompt.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {generatingImage ? (
+                    <>
+                      <div style={{ 
+                        width: 14, 
+                        height: 14, 
+                        border: "2px solid #fff", 
+                        borderTopColor: "transparent",
+                        borderRadius: "50%",
+                        animation: "spin 0.8s linear infinite",
+                      }} />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} /> Gerar com IA
+                    </>
+                  )}
+                </button>
+              </div>
+              <p style={{ 
+                fontSize: 11, 
+                color: "var(--text-tertiary)", 
+                margin: "6px 0 0",
+                fontStyle: "italic",
+              }}>
+                💡 Dica: Seja específico sobre estilo, iluminação e composição para melhores resultados.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              onClick={async () => {
+                const updated = await updateCampaign(id, { status: "COMPLETED" });
+                setCampaign(updated);
+              }}
+              className="btn-ghost"
+              style={{ fontSize: 13 }}
+            >
+              <CheckCircle size={14} /> Marcar como Concluída
+            </button>
+          </div>
         </div>
       )}
 

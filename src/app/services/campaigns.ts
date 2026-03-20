@@ -120,3 +120,16 @@ export async function brainstormStrategy(id: string): Promise<StrategyOption[]> 
   const { data } = await api.post<StrategyOption[]>(`/v1/campaigns/${id}/brainstorm`);
   return data;
 }
+
+export type CopyOption = {
+  headline: string;
+  primaryText: string;
+  cta: string;
+  framework: string;
+  reasoning: string;
+};
+
+export async function generateCopyOptions(id: string): Promise<CopyOption[]> {
+  const { data } = await api.post<CopyOption[]>(`/v1/campaigns/${id}/generate-copy`);
+  return data;
+}

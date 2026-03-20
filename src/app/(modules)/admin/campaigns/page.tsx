@@ -12,11 +12,14 @@
 
 "use client";
 
-import { Campaign, deleteCampaign, listCampaigns } from "@/app/services/campaigns";
+import { Campaign, CopyOption, deleteCampaign, generateCopyOptions, listCampaigns, updateCampaign } from "@/app/services/campaigns";
 import { BarChart3, Megaphone, Plus, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CampaignCard } from "./components/CampaignCard";
-import { CreateCampaignModal } from "./components/CreateCampaignModal";
+import { SimpleCampaignWizard } from "./components/SimpleCampaignWizard";
+import { CopyOptionsSelector } from "./components/CopyOptionsSelector";
+import { ProductImageUploadModal } from "./components/ProductImageUploadModal";
 
 // ── Filtros disponíveis ────────────────────────────────────────────────────────
 const FILTERS = [
@@ -30,6 +33,7 @@ const FILTERS = [
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 export default function CampaignsPage() {
+  const router = useRouter();
   const [campaigns, setCampaigns]   = useState<Campaign[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,6 +41,16 @@ export default function CampaignsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter]         = useState("ALL");
   const [search, setSearch]         = useState("");
+  
+  const [showCopySelector, setShowCopySelector] = useState(false);
+  const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
+  const [currentCampaignName, setCurrentCampaignName] = useState<string>("");
+  const [copyOptions, setCopyOptions] = useState<CopyOption[]>([]);
+  const [generatingCopy, setGeneratingCopy] = useState(false);
+  const [selectedCopyIndex, setSelectedCopyIndex] = useState<number | null>(null);
+  const [savingCopy, setSavingCopy] = useState(false);
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [selectedCopy, setSelectedCopy] = useState<CopyOption | null>(null);
 
   // ── Carga de dados ────────────────────────────────────────────────────────
   const load = useCallback(async (silent = false) => {
@@ -51,6 +65,69 @@ export default function CampaignsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Após criar campanha, gerar 3 opções de copy ──────────────────────────
+  async function handleCampaignCreated(campaign: Campaign) {
+    setCampaigns((prev) => [campaign, ...prev]);
+    setCurrentCampaignId(campaign.id);
+    setCurrentCampaignName(campaign.productName || campaign.name);
+    setGeneratingCopy(true);
+    
+    // Aguarda um pouco para o usuário ver a mensagem de "gerando"
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    try {
+      const options = await generateCopyOptions(campaign.id);
+      setCopyOptions(options);
+      setShowModal(false);
+      setShowCopySelector(true);
+    } catch (err) {
+      console.error("Erro ao gerar opções de copy:", err);
+      setShowModal(false);
+      router.push(`/admin/campaigns/${campaign.id}`);
+    } finally {
+      setGeneratingCopy(false);
+    }
+  }
+
+  // ── Selecionar uma das 3 opções de copy ──────────────────────────────────
+  async function handleSelectCopy(index: number) {
+    if (!currentCampaignId) return;
+    setSelectedCopyIndex(index);
+    setSavingCopy(true);
+    
+    try {
+      const chosen = copyOptions[index];
+      await updateCampaign(currentCampaignId, {
+        keyBenefits: `${chosen.headline}\n\n${chosen.primaryText}\n\nCTA: ${chosen.cta}`,
+        description: `Framework: ${chosen.framework} - ${chosen.reasoning}`,
+        status: "GENERATING_ASSETS",
+      });
+      
+      // Salva o copy escolhido e mostra modal de upload de imagem
+      setSelectedCopy(chosen);
+      setShowCopySelector(false);
+      setShowImageUpload(true);
+    } finally {
+      setSavingCopy(false);
+    }
+  }
+
+  // ── Após gerar imagem ou pular ────────────────────────────────────────────
+  async function handleImageComplete() {
+    setShowImageUpload(false);
+    if (currentCampaignId) {
+      await updateCampaign(currentCampaignId, { status: "COMPLETED" });
+      router.push(`/admin/campaigns/${currentCampaignId}`);
+    }
+  }
+
+  function handleSkipImage() {
+    setShowImageUpload(false);
+    if (currentCampaignId) {
+      router.push(`/admin/campaigns/${currentCampaignId}`);
+    }
+  }
 
   // ── Delete ────────────────────────────────────────────────────────────────
   async function handleDelete(id: string) {
@@ -89,9 +166,55 @@ export default function CampaignsPage() {
   return (
     <div>
       {showModal && (
-        <CreateCampaignModal
+        <SimpleCampaignWizard
           onClose={() => setShowModal(false)}
-          onCreated={(c) => setCampaigns((prev) => [c, ...prev])}
+          onCreated={handleCampaignCreated}
+        />
+      )}
+
+      {showCopySelector && (
+        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 dark:border-gray-800">
+            <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-8 py-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                🎯 Escolha a Melhor Opção de Copy
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Nossa IA gerou 3 opções usando diferentes frameworks de marketing. Escolha a que mais se conecta com seu público.
+              </p>
+            </div>
+            
+            <div className="px-8 py-6">
+              {generatingCopy ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-16 h-16 border-4 border-[#FD8F06] border-t-transparent rounded-full animate-spin mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400 font-medium">
+                    Gerando 3 opções de copy com IA...
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+                    Isso pode levar alguns segundos
+                  </p>
+                </div>
+              ) : (
+                <CopyOptionsSelector
+                  options={copyOptions}
+                  selectedIndex={selectedCopyIndex}
+                  onSelect={handleSelectCopy}
+                  saving={savingCopy}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImageUpload && selectedCopy && currentCampaignId && (
+        <ProductImageUploadModal
+          campaignId={currentCampaignId}
+          selectedCopy={selectedCopy}
+          productName={currentCampaignName}
+          onComplete={handleImageComplete}
+          onSkip={handleSkipImage}
         />
       )}
 
