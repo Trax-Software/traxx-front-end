@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, toServiceError, unwrap } from "./api";
 
 // --- Tipos ---
 
@@ -22,22 +22,38 @@ export type MetaAuthUrlResponse = {
 
 // --- API Functions ---
 
+async function withServiceError<T>(executor: () => Promise<T>): Promise<T> {
+  try {
+    return await executor();
+  } catch (error) {
+    throw toServiceError(error);
+  }
+}
+
 export const getMetaAuthUrl = async (): Promise<string> => {
-  const { data } = await api.get<MetaAuthUrlResponse>("/v1/integrations/meta/auth-url");
-  return data.url;
+  return withServiceError(async () => {
+    const response = await api.get("/integrations/meta/auth-url");
+    return unwrap<MetaAuthUrlResponse>(response).url;
+  });
 };
 
 export const connectMeta = async (code: string): Promise<{ success: boolean }> => {
-  const { data } = await api.post("/v1/integrations/meta/connect", { code });
-  return data;
+  return withServiceError(async () => {
+    const response = await api.post("/integrations/meta/connect", { code });
+    return unwrap<{ success: boolean }>(response);
+  });
 };
 
 export const getAdAccounts = async (): Promise<AdAccount[]> => {
-  const { data } = await api.get<AdAccount[]>("/v1/integrations/meta/ad-accounts");
-  return data;
+  return withServiceError(async () => {
+    const response = await api.get("/integrations/meta/ad-accounts");
+    return unwrap<AdAccount[]>(response);
+  });
 };
 
 export const getPages = async (): Promise<FacebookPage[]> => {
-  const { data } = await api.get<FacebookPage[]>("/v1/integrations/meta/pages");
-  return data;
+  return withServiceError(async () => {
+    const response = await api.get("/integrations/meta/pages");
+    return unwrap<FacebookPage[]>(response);
+  });
 };

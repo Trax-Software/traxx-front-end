@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, toServiceError, unwrap } from "./api";
 
 // --- Tipos ---
 
@@ -36,6 +36,9 @@ export type Campaign = {
   description?: string;
   createdAt: string;
   updatedAt: string;
+  _count?: {
+    adCreatives?: number;
+  };
   adCreatives?: AdCreative[];
 
   // Novos campos de Produto
@@ -92,33 +95,53 @@ export type StrategyOption = {
 
 // --- API Functions ---
 
+async function withServiceError<T>(executor: () => Promise<T>): Promise<T> {
+  try {
+    return await executor();
+  } catch (error) {
+    throw toServiceError(error);
+  }
+}
+
 export async function listCampaigns(): Promise<Campaign[]> {
-  const { data } = await api.get<Campaign[]>("/v1/campaigns");
-  return data;
+  return withServiceError(async () => {
+    const response = await api.get("/campaigns");
+    return unwrap<Campaign[]>(response);
+  });
 }
 
 export async function getCampaign(id: string): Promise<Campaign> {
-  const { data } = await api.get<Campaign>(`/v1/campaigns/${id}`);
-  return data;
+  return withServiceError(async () => {
+    const response = await api.get(`/campaigns/${id}`);
+    return unwrap<Campaign>(response);
+  });
 }
 
 export async function createCampaign(dto: CreateCampaignDto): Promise<Campaign> {
-  const { data } = await api.post<Campaign>("/v1/campaigns", dto);
-  return data;
+  return withServiceError(async () => {
+    const response = await api.post("/campaigns", dto);
+    return unwrap<Campaign>(response);
+  });
 }
 
 export async function updateCampaign(id: string, dto: UpdateCampaignDto): Promise<Campaign> {
-  const { data } = await api.patch<Campaign>(`/v1/campaigns/${id}`, dto);
-  return data;
+  return withServiceError(async () => {
+    const response = await api.patch(`/campaigns/${id}`, dto);
+    return unwrap<Campaign>(response);
+  });
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
-  await api.delete(`/v1/campaigns/${id}`);
+  return withServiceError(async () => {
+    await api.delete(`/campaigns/${id}`);
+  });
 }
 
 export async function brainstormStrategy(id: string): Promise<StrategyOption[]> {
-  const { data } = await api.post<StrategyOption[]>(`/v1/campaigns/${id}/brainstorm`);
-  return data;
+  return withServiceError(async () => {
+    const response = await api.post(`/campaigns/${id}/brainstorm`);
+    return unwrap<StrategyOption[]>(response);
+  });
 }
 
 export type CopyOption = {
@@ -130,6 +153,8 @@ export type CopyOption = {
 };
 
 export async function generateCopyOptions(id: string): Promise<CopyOption[]> {
-  const { data } = await api.post<CopyOption[]>(`/v1/campaigns/${id}/generate-copy`);
-  return data;
+  return withServiceError(async () => {
+    const response = await api.post(`/campaigns/${id}/generate-copy`);
+    return unwrap<CopyOption[]>(response);
+  });
 }

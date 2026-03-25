@@ -62,7 +62,28 @@ export function LoginForm() {
                     setErrorTop("Falha ao entrar. Verifique suas credenciais.");
                 }
             } else {
-                setErrorTop("Ocorreu um erro inesperado.");
+                const serviceMessage =
+                    typeof err === "object" &&
+                    err !== null &&
+                    "response" in err &&
+                    typeof err.response === "object" &&
+                    err.response !== null &&
+                    "data" in err.response &&
+                    typeof err.response.data === "object" &&
+                    err.response.data !== null &&
+                    "message" in err.response.data
+                        ? err.response.data.message
+                        : undefined;
+
+                if (typeof serviceMessage === "string") {
+                    setErrorTop(serviceMessage);
+                } else if (Array.isArray(serviceMessage)) {
+                    setErrorTop(serviceMessage.join(" • "));
+                } else if (err instanceof Error && err.message) {
+                    setErrorTop(err.message);
+                } else {
+                    setErrorTop("Ocorreu um erro inesperado.");
+                }
             }
         } finally {
             setLoading(false);

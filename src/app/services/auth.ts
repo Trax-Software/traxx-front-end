@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, toServiceError, unwrap } from "./api";
 
 export type SignInPayload = {
     email: string;
@@ -38,6 +38,10 @@ export async function signIn(payload: SignInPayload) {
         };
     }
 
-    const { data } = await api.post<SignInResponse>("/v1/auth/sign-in", payload);
-    return data;
+    try {
+        const response = await api.post("/auth/sign-in", payload);
+        return unwrap<SignInResponse>(response);
+    } catch (error) {
+        throw toServiceError(error);
+    }
 }

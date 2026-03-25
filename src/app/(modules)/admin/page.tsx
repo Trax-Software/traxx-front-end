@@ -1,8 +1,13 @@
+"use client";
+
 import AIWidget from "@/components/campaigns/AIWidget";
 import CampaignList from "@/components/campaigns/CampaignList";
 import CampaignToolbar from "@/components/campaigns/CampaignToolbar";
 import StatCard from "@/components/campaigns/StatCard";
 import StatsColumn from "@/components/campaigns/StatsColumn";
+import { CreateCampaignModal } from "@/app/(modules)/admin/campaigns/components/CreateCampaignModal";
+import { useCampaigns } from "@/app/(modules)/admin/hooks/useCampaigns";
+import { useState } from "react";
 
 function TrendUpIcon() {
   return (
@@ -14,41 +19,75 @@ function TrendUpIcon() {
 }
 
 export default function AdminPage() {
+  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  const { campaigns, isLoading, error, refetch } = useCampaigns();
+
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <section className="flex flex-col gap-6">
-        <CampaignToolbar />
-        <CampaignList />
-        <AIWidget />
-      </section>
+    <>
+      {isCreateModalOpen ? (
+        <CreateCampaignModal
+          onClose={() => setCreateModalOpen(false)}
+          onSuccess={() => {
+            void refetch();
+          }}
+        />
+      ) : null}
 
-      <StatsColumn>
-        <StatCard title="Campanhas Criadas (Mensal)" value="12">
-          <div className="flex items-end justify-between">
-            <div className="flex h-10 items-end gap-1">
-              <span className="h-[40%] w-2 rounded-sm bg-[var(--orange-light)]" />
-              <span className="h-[60%] w-2 rounded-sm bg-[var(--orange-light)]" />
-              <span className="h-[30%] w-2 rounded-sm bg-[var(--orange-light)]" />
-              <span className="h-full w-2 rounded-sm bg-[var(--brand-orange)] shadow-[0_0_8px_rgba(253,143,6,0.3)]" />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="flex flex-col gap-6">
+          <CampaignToolbar onCreateCampaign={() => setCreateModalOpen(true)} />
+
+          {isLoading ? (
+            <div className="text-sm text-[var(--text-secondary)]">Carregando campanhas...</div>
+          ) : null}
+
+          {error ? (
+            <div className="rounded-[10px] border border-[var(--danger-text)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger-text)]">
+              {error}
             </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-[var(--success-text)]">
-            <TrendUpIcon />
-            +3 vs anterior
-          </div>
-        </StatCard>
+          ) : null}
 
-        <StatCard
-          title="Assets Gerados"
-          value="148"
-          valueClassName="text-[var(--magenta-text,var(--brand-magenta))]"
-        >
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
-            <div className="h-full w-[75%] rounded-full bg-[var(--brand-magenta)] shadow-[0_0_10px_rgba(153,0,153,0.4)]" />
-          </div>
-          <div className="mt-3 text-sm text-[var(--text-secondary)]">Produção dentro da meta</div>
-        </StatCard>
-      </StatsColumn>
-    </div>
+          {!isLoading && !error && campaigns.length === 0 ? (
+            <div className="text-sm text-[var(--text-secondary)]">
+              Em breve. Ainda não há campanhas para exibir.
+            </div>
+          ) : null}
+
+          {!isLoading && !error && campaigns.length > 0 ? (
+            <CampaignList campaigns={campaigns} />
+          ) : null}
+
+          <AIWidget />
+        </section>
+
+        <StatsColumn>
+          <StatCard title="Campanhas Criadas (Mensal)" value="12">
+            <div className="flex items-end justify-between">
+              <div className="flex h-10 items-end gap-1">
+                <span className="h-[40%] w-2 rounded-sm bg-[var(--orange-light)]" />
+                <span className="h-[60%] w-2 rounded-sm bg-[var(--orange-light)]" />
+                <span className="h-[30%] w-2 rounded-sm bg-[var(--orange-light)]" />
+                <span className="h-full w-2 rounded-sm bg-[var(--brand-orange)] shadow-[0_0_8px_rgba(253,143,6,0.3)]" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-[var(--success-text)]">
+              <TrendUpIcon />
+              +3 vs anterior
+            </div>
+          </StatCard>
+
+          <StatCard
+            title="Assets Gerados"
+            value="148"
+            valueClassName="text-[var(--magenta-text,var(--brand-magenta))]"
+          >
+            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
+              <div className="h-full w-[75%] rounded-full bg-[var(--brand-magenta)] shadow-[0_0_10px_rgba(153,0,153,0.4)]" />
+            </div>
+            <div className="mt-3 text-sm text-[var(--text-secondary)]">Produção dentro da meta</div>
+          </StatCard>
+        </StatsColumn>
+      </div>
+    </>
   );
 }

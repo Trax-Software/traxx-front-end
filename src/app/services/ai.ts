@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, toServiceError, unwrap } from "./api";
 
 export type GenerateImageDto = {
   prompt: string;
@@ -11,6 +11,10 @@ export type GenerateImageResponse = {
 };
 
 export async function generateCampaignImage(dto: GenerateImageDto): Promise<GenerateImageResponse> {
-  const { data } = await api.post<GenerateImageResponse>("/v1/ai/generate-image", dto);
-  return data;
+  try {
+    const response = await api.post("/ai/generate-image", dto);
+    return unwrap<GenerateImageResponse>(response);
+  } catch (error) {
+    throw toServiceError(error);
+  }
 }

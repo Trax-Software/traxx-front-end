@@ -18,7 +18,11 @@ function PlusIcon() {
   );
 }
 
-export default function CampaignToolbar() {
+type CampaignToolbarProps = {
+  onCreateCampaign?: () => void;
+};
+
+export default function CampaignToolbar({ onCreateCampaign }: CampaignToolbarProps) {
   return (
     <div className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] lg:flex-row lg:items-center">
       <div className="relative flex-1">
@@ -50,6 +54,7 @@ export default function CampaignToolbar() {
 
       <button
         type="button"
+        onClick={onCreateCampaign}
         className="group relative inline-flex h-11 items-center gap-2 overflow-hidden rounded-[10px] bg-[var(--brand-orange)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition hover:-translate-y-0.5"
       >
         <span

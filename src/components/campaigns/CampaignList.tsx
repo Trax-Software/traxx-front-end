@@ -1,6 +1,18 @@
 import CampaignCard from "@/components/campaigns/CampaignCard";
 
-const campaigns = [
+export type CampaignListItem = {
+  id?: string;
+  title: string;
+  subtitle: string;
+  status: "success" | "warning" | "danger";
+  statusLabel: string;
+  timeLabel: string;
+  platformLabel: string;
+  platformColor: string;
+  platformBg: string;
+};
+
+const fallbackCampaigns: CampaignListItem[] = [
   {
     title: "Pipeline Q1 — Retargeting",
     subtitle: "Público: Leads quentes",
@@ -23,11 +35,15 @@ const campaigns = [
   },
 ];
 
-export default function CampaignList() {
+type CampaignListProps = {
+  campaigns?: CampaignListItem[];
+};
+
+export default function CampaignList({ campaigns = fallbackCampaigns }: CampaignListProps) {
   return (
     <div className="flex flex-col gap-4">
       {campaigns.map((campaign) => (
-        <CampaignCard key={campaign.title} {...campaign} />
+        <CampaignCard key={campaign.id ?? campaign.title} {...campaign} />
       ))}
     </div>
   );
