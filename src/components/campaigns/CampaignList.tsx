@@ -43,7 +43,11 @@ export default function CampaignList({ campaigns = fallbackCampaigns }: Campaign
   return (
     <div className="flex flex-col gap-4">
       {campaigns.map((campaign) => (
-        <CampaignCard key={campaign.id ?? campaign.title} {...campaign} />
+        <CampaignCard
+          key={campaign.id ?? campaign.title}
+          href={campaign.id ? `/admin/campaigns/${campaign.id}` : undefined}
+          {...campaign}
+        />
       ))}
     </div>
   );

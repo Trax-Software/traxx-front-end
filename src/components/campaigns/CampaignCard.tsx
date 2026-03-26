@@ -1,8 +1,10 @@
 import React from "react";
+import Link from "next/link";
 
 type Status = "success" | "warning" | "danger";
 
 type CampaignCardProps = {
+  href?: string;
   title: string;
   subtitle: string;
   status: Status;
@@ -20,6 +22,7 @@ const statusStyles: Record<Status, string> = {
 };
 
 export default function CampaignCard({
+  href,
   title,
   subtitle,
   status,
@@ -29,8 +32,8 @@ export default function CampaignCard({
   platformColor,
   platformBg,
 }: CampaignCardProps) {
-  return (
-    <div className="grid gap-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] transition hover:border-[var(--brand-orange)] sm:grid-cols-[48px_1fr] lg:grid-cols-[48px_2fr_1fr_1fr_auto] lg:items-center">
+  const cardContent = (
+    <>
       <div
         className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold"
         style={{ color: platformColor, background: platformBg }}
@@ -54,9 +57,8 @@ export default function CampaignCard({
         {timeLabel}
       </div>
 
-      <button
-        type="button"
-        aria-label="Mais opcoes"
+      <span
+        aria-hidden="true"
         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-[var(--text-secondary)] transition hover:border-[var(--border)] hover:bg-[var(--bg-body)]"
       >
         <span className="flex flex-col items-center gap-1">
@@ -64,7 +66,28 @@ export default function CampaignCard({
           <span className="h-1 w-1 rounded-full bg-current" />
           <span className="h-1 w-1 rounded-full bg-current" />
         </span>
-      </button>
+      </span>
+    </>
+  );
+
+  const cardClassName =
+    "grid gap-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] transition hover:border-[var(--brand-orange)] sm:grid-cols-[48px_1fr] lg:grid-cols-[48px_2fr_1fr_1fr_auto] lg:items-center";
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        aria-label={`Abrir campanha ${title}`}
+        className={cardClassName}
+      >
+        {cardContent}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={cardClassName}>
+      {cardContent}
     </div>
   );
 }

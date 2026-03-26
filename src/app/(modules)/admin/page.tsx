@@ -6,8 +6,8 @@ import CampaignToolbar from "@/components/campaigns/CampaignToolbar";
 import StatCard from "@/components/campaigns/StatCard";
 import StatsColumn from "@/components/campaigns/StatsColumn";
 import { CreateCampaignModal } from "@/app/(modules)/admin/campaigns/components/CreateCampaignModal";
-import { useCampaigns } from "@/app/(modules)/admin/hooks/useCampaigns";
-import { useState } from "react";
+import { mapApiCampaignToUi, useCampaigns } from "@/app/(modules)/admin/hooks/useCampaigns";
+import { useMemo, useState } from "react";
 
 function TrendUpIcon() {
   return (
@@ -21,6 +21,40 @@ function TrendUpIcon() {
 export default function AdminPage() {
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const { campaigns, isLoading, error, refetch } = useCampaigns();
+
+  const kpis = useMemo(() => {
+    const counters = {
+      total: campaigns.length,
+      drafts: 0,
+      waitingApproval: 0,
+      generatingAssets: 0,
+      completed: 0,
+      published: 0,
+    };
+
+    for (const campaign of campaigns) {
+      if (campaign.status === "DRAFT") {
+        counters.drafts += 1;
+      } else if (campaign.status === "WAITING_APPROVAL") {
+        counters.waitingApproval += 1;
+      } else if (campaign.status === "GENERATING_ASSETS") {
+        counters.generatingAssets += 1;
+      } else if (campaign.status === "COMPLETED") {
+        counters.completed += 1;
+      } else if (campaign.status === "PUBLISHED") {
+        counters.published += 1;
+      }
+    }
+
+    return counters;
+  }, [campaigns]);
+
+  const totalAssets = useMemo(
+    () => campaigns.reduce((sum, c) => sum + (c._count?.adCreatives ?? 0), 0),
+    [campaigns]
+  );
+
+  const campaignListItems = useMemo(() => campaigns.map(mapApiCampaignToUi), [campaigns]);
 
   return (
     <>
@@ -54,14 +88,14 @@ export default function AdminPage() {
           ) : null}
 
           {!isLoading && !error && campaigns.length > 0 ? (
-            <CampaignList campaigns={campaigns} />
+            <CampaignList campaigns={campaignListItems} />
           ) : null}
 
           <AIWidget />
         </section>
 
         <StatsColumn>
-          <StatCard title="Campanhas Criadas (Mensal)" value="12">
+          <StatCard title="Campanhas Criadas (Mensal)" value={String(kpis.total)}>
             <div className="flex items-end justify-between">
               <div className="flex h-10 items-end gap-1">
                 <span className="h-[40%] w-2 rounded-sm bg-[var(--orange-light)]" />
@@ -72,19 +106,21 @@ export default function AdminPage() {
             </div>
             <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-[var(--success-text)]">
               <TrendUpIcon />
-              +3 vs anterior
+              Rascunhos: {kpis.drafts}
             </div>
           </StatCard>
 
           <StatCard
             title="Assets Gerados"
-            value="148"
+            value={String(totalAssets)}
             valueClassName="text-[var(--magenta-text,var(--brand-magenta))]"
           >
             <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
               <div className="h-full w-[75%] rounded-full bg-[var(--brand-magenta)] shadow-[0_0_10px_rgba(153,0,153,0.4)]" />
             </div>
-            <div className="mt-3 text-sm text-[var(--text-secondary)]">Produção dentro da meta</div>
+            <div className="mt-3 text-sm text-[var(--text-secondary)]">
+              Em aprovação: {kpis.waitingApproval}
+            </div>
           </StatCard>
         </StatsColumn>
       </div>

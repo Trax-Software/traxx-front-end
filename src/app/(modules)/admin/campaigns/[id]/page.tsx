@@ -1,97 +1,163 @@
-/**
- * Página de Detalhe de Campanha
- * ─────────────────────────────────────────────────────────────────────────────
- * Exibe todos os dados de uma campanha com:
- *   - Breadcrumb + header com status e ações
- *   - Timeline visual do fluxo de status
- *   - Cards de informação editáveis inline
- *   - Seção de IA com brainstorm + seleção de estratégia
- *   - Grid de criativos gerados
- */
-
 "use client";
 
 import {
-  Campaign, StrategyOption,
-  brainstormStrategy, deleteCampaign, getCampaign, updateCampaign,
+  Campaign,
+  StrategyOption,
+  brainstormStrategy,
+  deleteCampaign,
+  getCampaign,
+  updateCampaign,
 } from "@/app/services/campaigns";
 import { generateCampaignImage } from "@/app/services/ai";
+import { normalizeApiError } from "@/app/services/api";
 import {
-  ArrowLeft, Calendar, CheckCircle, DollarSign, Edit3, FileText, 
-  Image as ImageIcon, Link as LinkIcon, Megaphone, Package,
-  RotateCcw, Save, Sparkles, Tag, Target, Trash2, X, Zap
+  ArrowLeft,
+  CheckCircle,
+  Image as ImageIcon,
+  Megaphone,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { CampaignStatusBadge, STATUS_META } from "../components/CampaignStatusBadge";
 import { StrategySelector } from "../components/StrategySelector";
 
-// ── Timeline de Status ────────────────────────────────────────────────────────
 const STATUS_FLOW: Campaign["status"][] = [
-  "DRAFT", "GENERATING_STRATEGY", "WAITING_APPROVAL",
-  "GENERATING_ASSETS", "COMPLETED", "PUBLISHED",
+  "DRAFT",
+  "GENERATING_STRATEGY",
+  "WAITING_APPROVAL",
+  "GENERATING_ASSETS",
+  "COMPLETED",
+  "PUBLISHED",
 ];
+
+function formatPlatform(platform: Campaign["platform"]) {
+  switch (platform) {
+    case "META":
+      return "Meta Ads";
+    case "GOOGLE":
+      return "Google Ads";
+    case "LINKEDIN":
+      return "LinkedIn";
+    default:
+      return platform;
+  }
+}
+
+function formatObjective(objective: Campaign["objective"]) {
+  switch (objective) {
+    case "AWARENESS":
+      return "Reconhecimento";
+    case "TRAFFIC":
+      return "Tráfego";
+    case "SALES":
+      return "Vendas";
+    case "LEADS":
+      return "Leads";
+    default:
+      return objective;
+  }
+}
+
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("pt-BR");
+}
+
+function toNumber(value?: number | string | null) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.replace(",", ".").trim();
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function formatCurrency(value?: number | string | null) {
+  const parsedValue = toNumber(value);
+  if (parsedValue === null) return "—";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(parsedValue);
+}
+
+function formatDateOrText(value?: string | null) {
+  if (!value) return "—";
+  const parsed = value.trim();
+  if (!parsed) return "—";
+  const date = new Date(parsed);
+  if (Number.isNaN(date.getTime())) return parsed;
+  return date.toLocaleDateString("pt-BR");
+}
+
+function displayText(value?: string | number | null) {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "number") return String(value);
+  const parsed = value.trim();
+  return parsed.length ? parsed : "—";
+}
 
 function StatusTimeline({ current }: { current: Campaign["status"] }) {
   const currentIdx = STATUS_FLOW.indexOf(current);
 
   return (
-    <div style={{ marginBottom: 32 }} className="animate-fade-slide">
-      <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 }}>
-        Progresso da Campanha
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+      <p className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
+        Progresso
       </p>
-      <div style={{
-        display: "flex", alignItems: "center",
-        overflowX: "auto", gap: 0, paddingBottom: 4,
-      }}>
-        {STATUS_FLOW.map((status, i) => {
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {STATUS_FLOW.map((status, index) => {
           const meta = STATUS_META[status];
           const Icon = meta.icon;
-          const isDone = i < currentIdx;
-          const isCurrent = i === currentIdx;
+          const isDone = index < currentIdx;
+          const isCurrent = index === currentIdx;
 
           return (
-            <div key={status} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-              {/* Passo */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: "50%",
-                  background: isDone
-                    ? "linear-gradient(135deg, #FD8F06, #990099)"
-                    : isCurrent
-                    ? "var(--primary-light)"
-                    : "var(--bg-surface-2)",
-                  border: `2px solid ${isDone ? "#FD8F06" : isCurrent ? "var(--primary)" : "var(--border)"}`,
-                  display: "grid", placeItems: "center",
-                  transition: "all 0.3s",
-                  boxShadow: isCurrent ? "0 0 0 4px var(--primary-light)" : "none",
-                }}>
-                  {isDone
-                    ? <CheckCircle size={15} color="#fff" />
-                    : <Icon size={14} color={isCurrent ? "var(--primary)" : "var(--text-tertiary)"} />
-                  }
+            <div key={status} className="flex flex-shrink-0 items-center gap-2">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className="grid h-8 w-8 place-items-center rounded-full border"
+                  style={{
+                    background: isDone
+                      ? "var(--brand-gradient)"
+                      : isCurrent
+                        ? "var(--orange-light)"
+                        : "var(--bg-body)",
+                    borderColor: isCurrent || isDone ? "var(--brand-orange)" : "var(--border)",
+                  }}
+                >
+                  {isDone ? (
+                    <CheckCircle size={14} className="text-white" />
+                  ) : (
+                    <Icon
+                      size={13}
+                      color={isCurrent ? "var(--brand-orange)" : "var(--text-secondary)"}
+                    />
+                  )}
                 </div>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, textAlign: "center",
-                  color: isCurrent ? "var(--primary)" : isDone ? "var(--text-secondary)" : "var(--text-tertiary)",
-                  maxWidth: 70, lineHeight: 1.3, whiteSpace: "nowrap",
-                }}>
+                <span className="max-w-[78px] text-center text-xs font-semibold text-[var(--text-secondary)]">
                   {meta.label}
                 </span>
               </div>
-
-              {/* Linha conectora */}
-              {i < STATUS_FLOW.length - 1 && (
-                <div style={{
-                  width: 40, height: 2, margin: "-18px 0 0",
-                  background: i < currentIdx
-                    ? "linear-gradient(90deg, #FD8F06, #990099)"
-                    : "var(--border)",
-                  transition: "background 0.3s",
-                  flexShrink: 0,
-                }} />
-              )}
+              {index < STATUS_FLOW.length - 1 ? (
+                <div
+                  className="h-[2px] w-7"
+                  style={{ background: index < currentIdx ? "var(--brand-gradient)" : "var(--border)" }}
+                />
+              ) : null}
             </div>
           );
         })}
@@ -100,163 +166,188 @@ function StatusTimeline({ current }: { current: Campaign["status"] }) {
   );
 }
 
-// ── Campo editável inline ─────────────────────────────────────────────────────
-function EditableField({
-  label, value, placeholder, multiline, icon: Icon,
-  onSave,
-}: {
+type DefinitionItem = {
   label: string;
-  value?: string;
-  placeholder: string;
-  multiline?: boolean;
-  icon: React.ElementType;
-  onSave: (val: string) => Promise<void>;
+  value: ReactNode;
+};
+
+function DefinitionSectionCard({
+  title,
+  subtitle,
+  items,
+}: {
+  title: string;
+  subtitle?: string;
+  items: DefinitionItem[];
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? "");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await onSave(draft);
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
-    <div className="card" style={{ padding: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <Icon size={14} color="var(--primary)" />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--text-tertiary)" }}>
-            {label}
-          </span>
+    <section className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-sm)]">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
+        <div>
+          <h2 className="text-lg font-bold text-[var(--text-main)]">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">{subtitle}</p> : null}
         </div>
-        {!editing && (
-          <button
-            onClick={() => { setDraft(value ?? ""); setEditing(true); }}
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: "var(--text-tertiary)", padding: 4, borderRadius: 6,
-              transition: "color 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--primary)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-tertiary)")}
-            aria-label={`Editar ${label}`}
-          >
-            <Edit3 size={13} />
-          </button>
-        )}
+        <button
+          type="button"
+          disabled
+          title="Em breve"
+          className="inline-flex h-9 items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-3 text-sm font-semibold text-[var(--text-secondary)] opacity-70"
+        >
+          Editar (Em breve)
+        </button>
       </div>
 
-      {editing ? (
-        <div style={{ display: "grid", gap: 8 }}>
-          {multiline ? (
-            <textarea
-              className="field-input"
-              style={{ minHeight: 72, resize: "vertical", fontSize: 13 }}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={placeholder}
-              autoFocus
-            />
-          ) : (
-            <input
-              className="field-input"
-              style={{ fontSize: 13 }}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={placeholder}
-              autoFocus
-            />
-          )}
-          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-            <button
-              onClick={() => setEditing(false)}
-              style={{
-                background: "none", border: "1px solid var(--border)",
-                borderRadius: 8, padding: "5px 12px", fontSize: 12,
-                cursor: "pointer", color: "var(--text-secondary)", fontFamily: "inherit",
-              }}
-            >
-              <X size={12} style={{ display: "inline", marginRight: 4 }} />
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                background: "var(--primary)", border: "none",
-                borderRadius: 8, padding: "5px 12px", fontSize: 12,
-                cursor: saving ? "not-allowed" : "pointer",
-                color: "#fff", fontWeight: 700, fontFamily: "inherit",
-                opacity: saving ? 0.7 : 1,
-              }}
-            >
-              <Save size={12} style={{ display: "inline", marginRight: 4 }} />
-              {saving ? "Salvando..." : "Salvar"}
-            </button>
+      <dl className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-3 py-2"
+          >
+            <dt className="text-sm font-semibold uppercase tracking-[0.06em] text-[var(--text-secondary)]">
+              {item.label}
+            </dt>
+            <dd className="mt-1 whitespace-pre-wrap text-base font-semibold leading-relaxed text-[var(--text-main)]">
+              {item.value}
+            </dd>
           </div>
-        </div>
-      ) : (
-        <p style={{
-          color: value ? "var(--text-primary)" : "var(--text-tertiary)",
-          fontSize: 13, lineHeight: 1.6, margin: 0,
-          fontStyle: value ? "normal" : "italic",
-        }}>
-          {value || placeholder}
-        </p>
-      )}
-    </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
-// ── Componente Principal ──────────────────────────────────────────────────────
+type NextStepConfig = {
+  description: string;
+  actionLabel?: string;
+  action?: () => Promise<void> | void;
+  disabled?: boolean;
+};
+
+function NextStepCard({
+  config,
+}: {
+  config: NextStepConfig;
+}) {
+  return (
+    <section className="rounded-[var(--radius-lg)] border border-[var(--brand-orange)] bg-[var(--orange-light)] p-6 shadow-[var(--shadow-sm)]">
+      <div className="mb-2 flex items-center gap-2">
+        <Zap size={16} className="text-[var(--brand-orange)]" />
+        <h2 className="text-lg font-bold text-[var(--text-main)]">Próximo passo</h2>
+      </div>
+      <p className="text-base leading-relaxed text-[var(--text-main)]">{config.description}</p>
+
+      {config.action && config.actionLabel ? (
+        <button
+          type="button"
+          onClick={() => void config.action?.()}
+          disabled={config.disabled}
+          className="mt-4 inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+          style={{ background: "var(--brand-gradient)" }}
+        >
+          <Sparkles size={14} />
+          {config.actionLabel}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
-  const [campaign, setCampaign]         = useState<Campaign | null>(null);
-  const [loading, setLoading]           = useState(true);
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [loading, setLoading] = useState(true);
   const [brainstorming, setBrainstorming] = useState(false);
-  const [strategies, setStrategies]     = useState<StrategyOption[]>([]);
-  const [selectedIdx, setSelectedIdx]   = useState<number | null>(null);
+  const [strategies, setStrategies] = useState<StrategyOption[]>([]);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [strategySaving, setStrategySaving] = useState(false);
-  const [error, setError]               = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
-  const [imagePrompt, setImagePrompt]   = useState("");
+  const [isImagePolling, setIsImagePolling] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const imagePollingIntervalRef = useRef<number | null>(null);
+  const imagePollingTimeoutRef = useRef<number | null>(null);
 
-  // ── Carregamento ────────────────────────────────────────────────────────────
+  function stopImagePolling() {
+    if (imagePollingIntervalRef.current !== null) {
+      window.clearInterval(imagePollingIntervalRef.current);
+      imagePollingIntervalRef.current = null;
+    }
+    if (imagePollingTimeoutRef.current !== null) {
+      window.clearTimeout(imagePollingTimeoutRef.current);
+      imagePollingTimeoutRef.current = null;
+    }
+    setIsImagePolling(false);
+  }
+
+  async function pollCampaignForGeneratedImage(params: {
+    baselineImageCreativeIds: Set<string>;
+    baselineImageCount: number;
+  }) {
+    try {
+      const latest = await getCampaign(id);
+      setCampaign(latest);
+
+      const imageCreatives = (latest.adCreatives ?? []).filter((creative) => Boolean(creative.imageUrl));
+      const hasNewImageCreative =
+        imageCreatives.length > params.baselineImageCount ||
+        imageCreatives.some((creative) => !params.baselineImageCreativeIds.has(creative.id));
+      const reachedFinalStatus = latest.status === "COMPLETED" || latest.status === "PUBLISHED";
+
+      if (hasNewImageCreative || reachedFinalStatus) {
+        stopImagePolling();
+      }
+    } catch (err) {
+      const parsedError = normalizeApiError(err);
+      setError(parsedError.message || "Erro ao atualizar os criativos.");
+      stopImagePolling();
+    }
+  }
+
+  function startImagePolling(params: {
+    baselineImageCreativeIds: Set<string>;
+    baselineImageCount: number;
+  }) {
+    stopImagePolling();
+    setIsImagePolling(true);
+
+    imagePollingIntervalRef.current = window.setInterval(() => {
+      void pollCampaignForGeneratedImage(params);
+    }, 4000);
+
+    imagePollingTimeoutRef.current = window.setTimeout(() => {
+      setError("A geração da imagem está demorando mais que o esperado. Atualize em instantes.");
+      stopImagePolling();
+    }, 90_000);
+  }
+
   useEffect(() => {
     getCampaign(id)
       .then(setCampaign)
       .catch(() => setError("Campanha não encontrada."))
       .finally(() => setLoading(false));
+
+    return () => {
+      stopImagePolling();
+    };
   }, [id]);
 
-  // ── Salvar campo inline ─────────────────────────────────────────────────────
-  async function saveField(field: keyof Campaign, value: string | number | null | undefined) {
-    const updated = await updateCampaign(id, { [field]: value });
-    setCampaign(updated);
-  }
-
-  // ── Brainstorm ──────────────────────────────────────────────────────────────
   async function handleBrainstorm() {
     if (!campaign) return;
-    setBrainstorming(true); setError(null);
+    setBrainstorming(true);
+    setError(null);
     try {
       const options = await brainstormStrategy(id);
       setStrategies(options);
-      setCampaign((prev) => prev ? { ...prev, status: "WAITING_APPROVAL" } : prev);
+      setCampaign((prev) => (prev ? { ...prev, status: "WAITING_APPROVAL" } : prev));
     } catch {
       setError("Erro ao gerar estratégia. Verifique sua conexão e tente novamente.");
-    } finally { setBrainstorming(false); }
+    } finally {
+      setBrainstorming(false);
+    }
   }
 
-  // ── Selecionar estratégia ───────────────────────────────────────────────────
   async function handleSelectStrategy(index: number) {
     if (!campaign) return;
     setSelectedIdx(index);
@@ -264,666 +355,391 @@ export default function CampaignDetailPage() {
     setStrategySaving(true);
     try {
       const updated = await updateCampaign(id, {
-        description:    chosen.description,
+        description: chosen.description,
         targetAudience: chosen.targetAudience,
-        status:         "GENERATING_ASSETS",
+        status: "GENERATING_ASSETS",
       });
       setCampaign(updated);
-      setStrategies([]); // Limpa as opções após seleção
-    } finally { setStrategySaving(false); }
+      setStrategies([]);
+    } finally {
+      setStrategySaving(false);
+    }
   }
 
-  // ── Gerar novamente ─────────────────────────────────────────────────────────
   function handleRegenerateBrainstorm() {
-    setStrategies([]); setSelectedIdx(null); setError(null);
+    setStrategies([]);
+    setSelectedIdx(null);
+    setError(null);
   }
 
-  // ── Gerar Imagem com IA ─────────────────────────────────────────────────────
   async function handleGenerateImage() {
     if (!campaign || !imagePrompt.trim()) {
       setError("Digite uma descrição para a imagem.");
       return;
     }
+
     setGeneratingImage(true);
     setError(null);
+
     try {
+      const baselineImageCreativeIds = new Set(
+        (campaign.adCreatives ?? [])
+          .filter((creative) => Boolean(creative.imageUrl))
+          .map((creative) => creative.id)
+      );
+      const baselineImageCount = baselineImageCreativeIds.size;
+
       const result = await generateCampaignImage({
         prompt: imagePrompt,
         campaignId: id,
       });
+
       setImagePrompt("");
       setError(null);
-      alert(`Imagem em processamento! Job ID: ${result.jobId}\n\nA imagem será gerada em background e aparecerá nos criativos em alguns segundos.`);
-      
-      setTimeout(() => {
-        getCampaign(id).then(setCampaign);
-      }, 3000);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Erro ao gerar imagem. Verifique seus créditos.");
+
+      if (result.status === "queued") {
+        startImagePolling({ baselineImageCreativeIds, baselineImageCount });
+      } else {
+        const latest = await getCampaign(id);
+        setCampaign(latest);
+      }
+    } catch (err) {
+      const parsedError = normalizeApiError(err);
+      setError(parsedError.message || "Erro ao gerar imagem. Verifique seus créditos.");
     } finally {
       setGeneratingImage(false);
     }
   }
 
-  // ── Delete ──────────────────────────────────────────────────────────────────
+  async function handleMarkCompleted() {
+    const updated = await updateCampaign(id, { status: "COMPLETED" });
+    setCampaign(updated);
+  }
+
+  async function handlePublish() {
+    const updated = await updateCampaign(id, { status: "PUBLISHED" });
+    setCampaign(updated);
+  }
+
   async function handleDelete() {
     if (!confirm("Tem certeza que deseja arquivar esta campanha?")) return;
     await deleteCampaign(id);
-    router.push("/admin/campaigns");
+    router.push("/admin");
   }
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
-  if (loading) return (
-    <div>
-      <div className="skeleton" style={{ height: 16, width: 120, marginBottom: 24 }} />
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 32 }}>
-        <div>
-          <div className="skeleton" style={{ height: 32, width: 280, marginBottom: 12 }} />
-          <div className="skeleton" style={{ height: 14, width: 180 }} />
-        </div>
-        <div className="skeleton" style={{ height: 36, width: 100 }} />
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="skeleton h-5 w-40" />
+        <div className="skeleton h-24 w-full" />
+        <div className="skeleton h-56 w-full" />
       </div>
-      <div style={{ display: "grid", gap: 12, marginBottom: 28 }}>
-        <div className="skeleton" style={{ height: 60 }} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-          <div className="skeleton" style={{ height: 90 }} />
-          <div className="skeleton" style={{ height: 90 }} />
-          <div className="skeleton" style={{ height: 90 }} />
-        </div>
-      </div>
-      <div className="skeleton" style={{ height: 180 }} />
-    </div>
-  );
+    );
+  }
 
-  if (error && !campaign) return (
-    <div style={{ padding: "80px 0", textAlign: "center" }}>
-      <p style={{ color: "#ef4444", marginBottom: 16, fontSize: 14 }}>{error}</p>
-      <Link href="/admin/campaigns" className="btn-ghost">← Voltar para Campanhas</Link>
-    </div>
-  );
+  if (error && !campaign) {
+    return (
+      <div className="py-16 text-center">
+        <p className="mb-4 text-sm text-[var(--danger-text)]">{error}</p>
+        <Link href="/admin" className="btn-ghost">
+          ← Voltar para Campanhas
+        </Link>
+      </div>
+    );
+  }
 
   const c = campaign!;
 
+  const nextStepConfig: NextStepConfig = (() => {
+    switch (c.status) {
+      case "DRAFT":
+      case "GENERATING_STRATEGY":
+        return {
+          description: "Gere estratégias com IA para avançar para a fase de aprovação.",
+          actionLabel: brainstorming ? "Gerando estratégias..." : "Gerar Estratégias com IA",
+          action: handleBrainstorm,
+          disabled: brainstorming,
+        };
+      case "WAITING_APPROVAL":
+        if (strategies.length > 0) {
+          return {
+            description: "Revise as estratégias geradas abaixo e selecione a melhor opção.",
+          };
+        }
+        return {
+          description: "Nenhuma estratégia carregada no momento. Gere novamente para revisar opções.",
+          actionLabel: brainstorming ? "Gerando estratégias..." : "Gerar Estratégias com IA",
+          action: handleBrainstorm,
+          disabled: brainstorming,
+        };
+      case "GENERATING_ASSETS":
+        return {
+          description: "Aguarde a geração dos assets ou finalize manualmente quando estiver tudo pronto.",
+          actionLabel: "Marcar como Concluída",
+          action: handleMarkCompleted,
+        };
+      case "COMPLETED":
+        return {
+          description: "Campanha concluída. Publique para colocar no ar.",
+          actionLabel: "Publicar Campanha",
+          action: handlePublish,
+        };
+      case "PUBLISHED":
+        return {
+          description: "Campanha publicada com sucesso. Agora acompanhe desempenho e ajuste criativos.",
+        };
+      default:
+        return {
+          description: "Siga para a próxima etapa da campanha.",
+        };
+    }
+  })();
+
+  const strategyItems: DefinitionItem[] = [
+    { label: "Descrição", value: displayText(c.description) },
+    { label: "Público-alvo", value: displayText(c.targetAudience) },
+    { label: "Benefícios", value: displayText(c.keyBenefits) },
+    { label: "Tom da Marca", value: displayText(c.brandTone) },
+    { label: "Plataforma", value: formatPlatform(c.platform) },
+    { label: "Objetivo", value: formatObjective(c.objective) },
+  ];
+
+  const productItems: DefinitionItem[] = [
+    { label: "Nome do Produto", value: displayText(c.productName) },
+    { label: "Categoria", value: displayText(c.productCategory) },
+    { label: "Preço de Oferta", value: formatCurrency(c.productPrice) },
+    { label: "Preço Original", value: formatCurrency(c.productOriginalPrice) },
+    { label: "URL", value: displayText(c.productUrl) },
+    { label: "Diferencial (USP)", value: displayText(c.productUsp) },
+  ];
+
+  const offerItems: DefinitionItem[] = [
+    { label: "Tipo de Oferta", value: displayText(c.offerType) },
+    { label: "Prazo", value: formatDateOrText(c.offerDeadline) },
+    { label: "CTA", value: displayText(c.ctaText) },
+    { label: "Orçamento Diário", value: formatCurrency(c.budgetDaily) },
+    { label: "Orçamento Total", value: formatCurrency(c.budgetTotal) },
+    { label: "Criada em", value: formatDate(c.createdAt) },
+  ];
+
   return (
-    <div>
-      {/* ── Breadcrumb ──────────────────────────────────────────────────────── */}
-      <Link
-        href="/admin/campaigns"
-        className="animate-fade-slide"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          color: "var(--text-tertiary)", fontSize: 13, textDecoration: "none",
-          marginBottom: 20, fontWeight: 600, transition: "color 0.2s",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--primary)")}
-        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-tertiary)")}
-      >
+    <div className="space-y-6">
+      <Link href="/admin" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-main)]">
         <ArrowLeft size={14} /> Campanhas
       </Link>
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div
-        className="animate-fade-slide"
-        style={{
-          display: "flex", alignItems: "flex-start",
-          justifyContent: "space-between", marginBottom: 28, gap: 16, flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
-            <h1 className="page-title" style={{ margin: 0 }}>{c.name}</h1>
-            <CampaignStatusBadge status={c.status} />
+      <header className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[clamp(1.6rem,3vw,2.4rem)] font-extrabold leading-tight text-[var(--text-main)]">{c.name}</h1>
+              <CampaignStatusBadge status={c.status} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)] sm:text-base">
+              <span>{formatPlatform(c.platform)}</span>
+              <span>•</span>
+              <span>{formatObjective(c.objective)}</span>
+              <span>•</span>
+              <span>Criada em {formatDate(c.createdAt)}</span>
+            </div>
           </div>
-          <p className="page-subtitle">
-            {c.platform === "META" ? "Meta Ads" : c.platform === "GOOGLE" ? "Google Ads" : "LinkedIn Ads"}
-            {" · "}
-            {c.objective === "AWARENESS" ? "Reconhecimento" : c.objective === "TRAFFIC" ? "Tráfego" : c.objective === "SALES" ? "Vendas" : "Leads"}
-            {" · "}
-            Criada em {new Date(c.createdAt).toLocaleDateString("pt-BR")}
-          </p>
-        </div>
-        <button onClick={handleDelete} className="btn-danger">
-          <Trash2 size={13} /> Arquivar
-        </button>
-      </div>
 
-      {/* ── Timeline de Status ───────────────────────────────────────────────── */}
+          <button
+            onClick={handleDelete}
+            className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-4 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--danger-text)] hover:text-[var(--danger-text)]"
+          >
+            <Trash2 size={14} /> Arquivar
+          </button>
+        </div>
+      </header>
+
       <StatusTimeline current={c.status} />
 
-      {/* ── Painel de Ação Contextual por Status ───────────────────────────────── */}
-      {c.status === "DRAFT" && (
-        <div className="animate-fade-slide" style={{
-          background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
-          borderRadius: 14, padding: "16px 20px", marginBottom: 24,
-          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Sparkles size={18} color="#8b5cf6" />
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                Campanha criada com sucesso!
-              </p>
-              <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
-                Use a IA para gerar estratégias ou pule direto para concluir a campanha.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={async () => {
-              const updated = await updateCampaign(id, { status: "COMPLETED" });
-              setCampaign(updated);
-            }}
-            className="btn-ghost"
-            style={{ fontSize: 13 }}
-          >
-            <CheckCircle size={14} /> Pular para Concluída
-          </button>
-        </div>
-      )}
+      <NextStepCard config={nextStepConfig} />
 
-      {c.status === "GENERATING_ASSETS" && (
-        <div className="animate-fade-slide" style={{ marginBottom: 24 }}>
-          <div style={{
-            background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)",
-            borderRadius: 14, padding: "16px 20px", marginBottom: 16,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <Zap size={18} color="#3b82f6" />
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                  Estratégia aplicada! Próximo passo: Criativos
-                </p>
-                <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
-                  Gere imagens com IA ou adicione manualmente. Quando estiver pronto, marque como concluída.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ 
-              background: "var(--bg-surface)", 
-              borderRadius: 10, 
-              padding: 14,
-              border: "1px solid var(--border)",
-            }}>
-              <label style={{ 
-                fontSize: 12, 
-                fontWeight: 600, 
-                color: "var(--text-secondary)", 
-                display: "block",
-                marginBottom: 8,
-              }}>
-                <ImageIcon size={13} style={{ display: "inline", marginRight: 4 }} />
-                Descreva a imagem que deseja gerar
-              </label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="text"
-                  value={imagePrompt}
-                  onChange={(e) => setImagePrompt(e.target.value)}
-                  placeholder="Ex: Produto em fundo minimalista, iluminação profissional, alta qualidade..."
-                  style={{
-                    flex: 1,
-                    padding: "10px 14px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: "var(--bg-surface-2)",
-                    color: "var(--text-primary)",
-                    fontSize: 13,
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && handleGenerateImage()}
-                />
-                <button
-                  onClick={handleGenerateImage}
-                  disabled={generatingImage || !imagePrompt.trim()}
-                  className="btn-primary"
-                  style={{ 
-                    whiteSpace: "nowrap",
-                    opacity: generatingImage || !imagePrompt.trim() ? 0.6 : 1,
-                  }}
-                >
-                  {generatingImage ? (
-                    <>
-                      <div style={{ 
-                        width: 14, 
-                        height: 14, 
-                        border: "2px solid #fff", 
-                        borderTopColor: "transparent",
-                        borderRadius: "50%",
-                        animation: "spin 0.8s linear infinite",
-                      }} />
-                      Gerando...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={14} /> Gerar com IA
-                    </>
-                  )}
-                </button>
-              </div>
-              <p style={{ 
-                fontSize: 11, 
-                color: "var(--text-tertiary)", 
-                margin: "6px 0 0",
-                fontStyle: "italic",
-              }}>
-                💡 Dica: Seja específico sobre estilo, iluminação e composição para melhores resultados.
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              onClick={async () => {
-                const updated = await updateCampaign(id, { status: "COMPLETED" });
-                setCampaign(updated);
-              }}
-              className="btn-ghost"
-              style={{ fontSize: 13 }}
-            >
-              <CheckCircle size={14} /> Marcar como Concluída
-            </button>
-          </div>
-        </div>
-      )}
-
-      {c.status === "COMPLETED" && (
-        <div className="animate-fade-slide" style={{
-          background: "linear-gradient(135deg, rgba(253,143,6,0.10), rgba(153,0,153,0.10))",
-          border: "1px solid rgba(253,143,6,0.30)",
-          borderRadius: 14, padding: "16px 20px", marginBottom: 24,
-          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Megaphone size={18} color="var(--primary)" />
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                Campanha concluída!
-              </p>
-              <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
-                Tudo revisado? Publique agora na plataforma escolhida.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={async () => {
-              const updated = await updateCampaign(id, { status: "PUBLISHED" });
-              setCampaign(updated);
-            }}
-            className="btn-primary"
-            style={{ background: "linear-gradient(135deg, #FD8F06, #990099)" }}
-          >
-            <Megaphone size={14} /> Publicar Campanha
-          </button>
-        </div>
-      )}
-
-      {c.status === "PUBLISHED" && (
-        <div className="animate-fade-slide" style={{
-          background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)",
-          borderRadius: 14, padding: "14px 20px", marginBottom: 24,
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <CheckCircle size={18} color="#16a34a" />
-          <p style={{ fontSize: 14, fontWeight: 700, color: "#16a34a", margin: 0 }}>
-            Campanha publicada e no ar! 🚀
-          </p>
-        </div>
-      )}
-
-      {/* ── Informações da Campanha (editáveis inline) ──────────────────────── */}
-      <div style={{ marginBottom: 28 }}>
-        <p style={{
-          fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)",
-          letterSpacing: 1, textTransform: "uppercase", marginBottom: 14,
-        }}>
-          Dados da Campanha
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}
-          className="stagger-children">
-          <EditableField
-            label="Descrição / Estratégia"
-            value={c.description}
-            placeholder="Clique em editar para adicionar uma descrição ou estratégia..."
-            multiline
-            icon={FileText}
-            onSave={(v) => saveField("description", v)}
-          />
-          <EditableField
-            label="Público-Alvo"
-            value={c.targetAudience}
-            placeholder="Descreva o público-alvo desta campanha..."
-            multiline
-            icon={Target}
-            onSave={(v) => saveField("targetAudience", v)}
-          />
-          <EditableField
-            label="Principais Benefícios"
-            value={c.keyBenefits}
-            placeholder="Liste os principais benefícios e diferenciais..."
-            multiline
-            icon={Zap}
-            onSave={(v) => saveField("keyBenefits", v)}
-          />
-        </div>
-      </div>
-
-      {/* ── Seção: O Produto ─────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28 }}>
-        <p style={{
-          fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)",
-          letterSpacing: 1, textTransform: "uppercase", marginBottom: 14,
-        }}>
-          O Produto
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}
-          className="stagger-children">
-          <EditableField
-            label="Nome do Produto"
-            value={c.productName}
-            placeholder="Nome do produto principal..."
-            icon={Package}
-            onSave={(v) => saveField("productName", v)}
-          />
-          <EditableField
-            label="Categoria"
-            value={c.productCategory}
-            placeholder="Ex: Calçados, Eletrônicos..."
-            icon={Tag}
-            onSave={(v) => saveField("productCategory", v)}
-          />
-          <EditableField
-            label="Preço Original (R$)"
-            value={c.productOriginalPrice?.toString()}
-            placeholder="0,00"
-            icon={DollarSign}
-            onSave={(v) => saveField("productOriginalPrice", v ? parseFloat(v) : null)}
-          />
-          <EditableField
-            label="Preço Oferta (R$)"
-            value={c.productPrice?.toString()}
-            placeholder="0,00"
-            icon={Zap}
-            onSave={(v) => saveField("productPrice", v ? parseFloat(v) : null)}
-          />
-          <EditableField
-            label="URL da Loja / LP"
-            value={c.productUrl}
-            placeholder="https://sua-loja.com/produto"
-            icon={LinkIcon}
-            onSave={(v) => saveField("productUrl", v)}
-          />
-          <EditableField
-            label="Diferencial (USP)"
-            value={c.productUsp}
-            placeholder="O que torna este produto único?"
-            multiline
-            icon={Sparkles}
-            onSave={(v) => saveField("productUsp", v)}
-          />
-        </div>
-      </div>
-
-      {/* ── Seção: Oferta & Orçamento ────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28 }}>
-        <p style={{
-          fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)",
-          letterSpacing: 1, textTransform: "uppercase", marginBottom: 14,
-        }}>
-          Oferta & Orçamento
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}
-          className="stagger-children">
-          <EditableField
-            label="Tipo de Oferta"
-            value={c.offerType}
-            placeholder="Ex: DISCOUNT, FREE_SHIPPING..."
-            icon={Tag}
-            onSave={(v) => saveField("offerType", v)}
-          />
-          <EditableField
-            label="Prazo (Deadline)"
-            value={c.offerDeadline}
-            placeholder="YYYY-MM-DD"
-            icon={Calendar}
-            onSave={(v) => saveField("offerDeadline", v)}
-          />
-          <EditableField
-            label="CTA (Chamada)"
-            value={c.ctaText}
-            placeholder="Ex: Compre Agora, Saiba Mais..."
-            icon={Megaphone}
-            onSave={(v) => saveField("ctaText", v)}
-          />
-          <EditableField
-            label="Orçamento Diário (R$)"
-            value={c.budgetDaily?.toString()}
-            placeholder="50,00"
-            icon={DollarSign}
-            onSave={(v) => saveField("budgetDaily", v ? parseFloat(v) : null)}
-          />
-        </div>
-      </div>
-
-      {/* ── Seção de IA ─────────────────────────────────────────────────────── */}
       <div
-        className="animate-fade-slide"
+        className="rounded-[var(--radius-lg)] border border-[var(--border)] p-5 shadow-[var(--shadow-sm)]"
         style={{
-          borderRadius: 20, overflow: "hidden", position: "relative",
-          background: "linear-gradient(135deg, #2a0050 0%, #5a0070 40%, #8b0080 70%, #b33000 100%)",
-          boxShadow: "0 16px 48px rgba(153,0,153,0.30)",
-          marginBottom: 28,
+          background: "var(--brand-gradient)",
         }}
       >
-        {/* Orbs decorativos */}
-        <div style={{
-          position: "absolute", top: -80, right: -80, width: 280, height: 280,
-          borderRadius: "50%", background: "rgba(253,143,6,0.18)", filter: "blur(60px)",
-          pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", bottom: -60, left: -60, width: 200, height: 200,
-          borderRadius: "50%", background: "rgba(255,255,255,0.06)", filter: "blur(40px)",
-          pointerEvents: "none",
-        }} />
-
-        <div style={{ padding: 28, position: "relative" }}>
-          {/* Header da seção IA */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 10,
-                background: "rgba(253,143,6,0.25)", display: "grid", placeItems: "center",
-              }}>
-                <Sparkles size={18} color="#FD8F06" />
-              </div>
-              <div>
-                <h2 style={{ fontSize: 17, fontWeight: 800, color: "#fff", margin: 0 }}>
-                  Estratégia com IA
-                </h2>
-                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", margin: 0 }}>
-                  Powered by TRAX AI
-                </p>
-              </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-[10px] bg-white/15">
+              <Sparkles size={17} className="text-white" />
             </div>
-
-            {strategies.length > 0 && (
-              <button
-                onClick={handleRegenerateBrainstorm}
-                style={{
-                  background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 8, padding: "7px 12px", cursor: "pointer",
-                  color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: 600,
-                  display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit",
-                  transition: "background 0.2s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.16)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              >
-                <RotateCcw size={12} /> Gerar novamente
-              </button>
-            )}
+            <div>
+              <h2 className="text-lg font-bold text-white">Estratégia com IA</h2>
+              <p className="text-sm leading-relaxed text-white/80">Análise e recomendação de estratégia</p>
+            </div>
           </div>
 
-          <p style={{ color: "rgba(255,255,255,0.68)", fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>
-            A IA analisa o público-alvo, benefícios e tom de voz para criar estratégias personalizadas para a sua campanha.
-          </p>
-
-          {error && (
-            <div style={{
-              background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#ffcdd2", marginBottom: 16,
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* Estado: sem estratégias geradas */}
-          {strategies.length === 0 && c.status !== "GENERATING_ASSETS" && c.status !== "COMPLETED" && c.status !== "PUBLISHED" && (
+          {strategies.length > 0 ? (
             <button
-              onClick={handleBrainstorm}
-              disabled={brainstorming}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 10,
-                padding: "12px 24px", borderRadius: 12, border: "none",
-                background: brainstorming
-                  ? "rgba(255,255,255,0.12)"
-                  : "linear-gradient(135deg, #FD8F06, #cc4400)",
-                color: "#fff", fontWeight: 700, fontSize: 14,
-                cursor: brainstorming ? "not-allowed" : "pointer",
-                transition: "all 0.2s", fontFamily: "inherit",
-                boxShadow: brainstorming ? "none" : "0 4px 16px rgba(253,143,6,0.40)",
-                opacity: brainstorming ? 0.8 : 1,
-              }}
+              onClick={handleRegenerateBrainstorm}
+              className="inline-flex items-center gap-2 rounded-[8px] border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white/90 transition hover:bg-white/15"
             >
-              <Sparkles size={16} style={brainstorming ? { animation: "spin 1.5s linear infinite" } : undefined} />
-              {brainstorming ? "Gerando estratégias com IA..." : "Gerar Estratégias com IA"}
+              <RotateCcw size={12} /> Gerar novamente
             </button>
-          )}
+          ) : null}
+        </div>
 
-          {/* Estado: estratégias geradas → seletor */}
-          {strategies.length > 0 && (
+        {error ? (
+          <div className="mb-4 rounded-[10px] border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
+            {error}
+          </div>
+        ) : null}
+
+        {strategies.length === 0 && c.status !== "GENERATING_ASSETS" && c.status !== "COMPLETED" && c.status !== "PUBLISHED" ? (
+          <button
+            onClick={handleBrainstorm}
+            disabled={brainstorming}
+            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ background: "var(--brand-gradient)" }}
+          >
+            <Sparkles size={14} />
+            {brainstorming ? "Gerando estratégias com IA..." : "Gerar Estratégias com IA"}
+          </button>
+        ) : null}
+
+        {strategies.length > 0 ? (
+          <div className="mt-3">
             <StrategySelector
               strategies={strategies}
               selectedIndex={selectedIdx}
               onSelect={handleSelectStrategy}
               saving={strategySaving}
             />
-          )}
+          </div>
+        ) : null}
 
-          {/* Estado: estratégia já selecionada anteriormente */}
-          {strategies.length === 0 && (c.status === "GENERATING_ASSETS" || c.status === "COMPLETED" || c.status === "PUBLISHED") && (
-            <div style={{
-              background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)",
-              borderRadius: 12, padding: "14px 18px",
-              display: "flex", alignItems: "center", gap: 10,
-            }}>
-              <CheckCircle size={18} color="#22c55e" />
-              <div>
-                <p style={{ color: "#22c55e", fontWeight: 700, fontSize: 14, margin: 0 }}>
-                  Estratégia aplicada com sucesso!
-                </p>
-                <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, margin: 0 }}>
-                  Você pode gerar novas opções usando o botão abaixo.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Botão de re-brainstorm quando estratégia já aplicada */}
-          {strategies.length === 0 && (c.status === "GENERATING_ASSETS" || c.status === "COMPLETED" || c.status === "PUBLISHED") && (
-            <button
-              onClick={handleBrainstorm}
-              disabled={brainstorming}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8, marginTop: 14,
-                padding: "9px 18px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.20)",
-                background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.80)",
-                fontSize: 13, fontWeight: 600, cursor: brainstorming ? "not-allowed" : "pointer",
-                transition: "background 0.2s", fontFamily: "inherit",
-              }}
-            >
-              <RotateCcw size={13} /> Gerar novas opções de estratégia
-            </button>
-          )}
-        </div>
+        {strategies.length === 0 && (c.status === "GENERATING_ASSETS" || c.status === "COMPLETED" || c.status === "PUBLISHED") ? (
+          <div className="mt-2 rounded-[var(--radius-md)] border border-white/20 bg-white/10 px-4 py-3 text-sm leading-relaxed text-white/90">
+            Estratégia aplicada com sucesso. Você pode gerar novas opções se quiser comparar alternativas.
+          </div>
+        ) : null}
       </div>
 
-      {/* ── Criativos ────────────────────────────────────────────────────────── */}
-      {c.adCreatives && c.adCreatives.length > 0 && (
-        <div className="animate-fade-slide">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <ImageIcon size={17} color="var(--primary)" />
-            <h2 style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)", margin: 0 }}>
-              Criativos Gerados
-            </h2>
-            <span style={{
-              background: "var(--primary-light)", color: "var(--primary)",
-              borderRadius: 9999, padding: "2px 8px", fontSize: 11, fontWeight: 700,
-            }}>
-              {c.adCreatives.length}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <DefinitionSectionCard
+          title="Estratégia"
+          subtitle="Resumo dos dados estratégicos da campanha."
+          items={strategyItems}
+        />
+        <DefinitionSectionCard
+          title="Produto"
+          subtitle="Informações do produto e oferta principal."
+          items={productItems}
+        />
+      </div>
+
+      <DefinitionSectionCard
+        title="Oferta e Orçamento"
+        subtitle="Condições comerciais e investimento planejado."
+        items={offerItems}
+      />
+
+      <section className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)]">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+          <div className="flex items-center gap-2">
+            <ImageIcon size={16} className="text-[var(--brand-orange)]" />
+            <h2 className="text-lg font-bold text-[var(--text-main)]">Assets e Criativos</h2>
+            <span className="rounded-full border border-[var(--border)] bg-[var(--bg-body)] px-2 py-0.5 text-sm font-semibold text-[var(--text-secondary)]">
+              {c.adCreatives?.length ?? 0}
             </span>
           </div>
+        </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-            {c.adCreatives.map((creative) => (
-              <div
-                key={creative.id}
-                className="card card-lift"
-                style={{
-                  overflow: "hidden",
-                  border: creative.isSelected
-                    ? "2px solid var(--primary)"
-                    : "1px solid var(--border)",
-                }}
+        {c.status === "GENERATING_ASSETS" ? (
+          <div className="mb-5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] p-4">
+            <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.06em] text-[var(--text-secondary)]">
+              Descreva a imagem que deseja gerar
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                placeholder="Ex: Produto em fundo minimalista, iluminação profissional..."
+                className="h-10 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-main)] outline-none"
+                onKeyDown={(e) => e.key === "Enter" && handleGenerateImage()}
+              />
+              <button
+                onClick={handleGenerateImage}
+                disabled={generatingImage || isImagePolling || !imagePrompt.trim()}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ background: "var(--brand-gradient)" }}
               >
-                {/* Preview */}
+                <Sparkles size={14} />
+                {generatingImage ? "Gerando..." : isImagePolling ? "Processando..." : "Gerar com IA"}
+              </button>
+            </div>
+            {isImagePolling ? (
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                Gerando imagem... vamos atualizar automaticamente quando o criativo ficar pronto.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mb-4 text-sm leading-relaxed text-[var(--text-secondary)]">
+            A geração de imagem fica disponível quando a campanha estiver em <strong>Gerando Assets</strong>.
+          </p>
+        )}
+
+        {c.adCreatives && c.adCreatives.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {c.adCreatives.map((creative) => (
+              <article
+                key={creative.id}
+                className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)]"
+              >
                 {creative.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={creative.imageUrl}
                     alt={creative.name}
-                    style={{ width: "100%", height: 160, objectFit: "cover" }}
+                    className="h-44 w-full object-cover"
                   />
                 ) : (
-                  <div style={{
-                    height: 160, background: "var(--bg-surface-2)",
-                    display: "grid", placeItems: "center",
-                  }}>
-                    <ImageIcon size={28} color="var(--border-strong)" />
+                  <div className="grid h-44 place-items-center border-b border-[var(--border)] bg-[var(--bg-surface)]">
+                    <ImageIcon size={24} className="text-[var(--text-secondary)]" />
                   </div>
                 )}
 
-                {/* Info */}
-                <div style={{ padding: 14 }}>
-                  {creative.isSelected && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
-                      <CheckCircle size={12} color="#FD8F06" />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#FD8F06" }}>
-                        Selecionado
-                      </span>
-                    </div>
-                  )}
-                  <p style={{
-                    fontWeight: 700, fontSize: 13, color: "var(--text-primary)",
-                    marginBottom: 4, lineHeight: 1.3,
-                  }}>
+                <div className="space-y-1 p-3">
+                  {creative.isSelected ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--orange-light)] px-2 py-0.5 text-xs font-semibold text-[var(--brand-orange)]">
+                      <CheckCircle size={11} /> Selecionado
+                    </span>
+                  ) : null}
+                  <p className="text-base font-semibold text-[var(--text-main)]">
                     {creative.headline ?? creative.name}
                   </p>
-                  {creative.primaryText && (
-                    <p style={{
-                      fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5,
-                      display: "-webkit-box", WebkitLineClamp: 3,
-                      WebkitBoxOrient: "vertical", overflow: "hidden",
-                    }}>
-                      {creative.primaryText}
-                    </p>
-                  )}
+                  {creative.primaryText ? (
+                    <p className="line-clamp-3 text-sm leading-relaxed text-[var(--text-secondary)]">{creative.primaryText}</p>
+                  ) : null}
                 </div>
-              </div>
+              </article>
             ))}
           </div>
+        ) : (
+          <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--bg-body)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
+            Ainda não há criativos para esta campanha.
+          </div>
+        )}
+      </section>
+
+      {c.status === "COMPLETED" ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+          <button
+            onClick={handlePublish}
+            className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)]"
+            style={{ background: "var(--brand-gradient)" }}
+          >
+            <Megaphone size={14} /> Publicar Campanha
+          </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

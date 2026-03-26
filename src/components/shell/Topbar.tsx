@@ -21,7 +21,7 @@ export default function Topbar({ title, userName = "Murilo" }: TopbarProps) {
     routeTitleMap.find((item) => pathname.startsWith(item.prefix))?.title ?? title;
 
   return (
-    <header className="flex flex-col gap-3 px-6 pt-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between">
+    <header className="sticky top-0 z-20 flex flex-col gap-3 bg-[var(--bg-body)] px-6 pt-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-main)]">
           {resolvedTitle}

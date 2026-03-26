@@ -70,7 +70,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex w-full flex-col gap-6 border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-6 md:min-h-screen md:w-64 md:border-b-0 md:border-r">
+    <aside className="flex w-full flex-col gap-6 border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-6 md:h-screen md:w-64 md:flex-shrink-0 md:overflow-y-auto md:border-b-0 md:border-r">
       <div>
         <div className="mb-8 flex items-center gap-3 text-lg font-extrabold text-[var(--text-main)]">
           <div

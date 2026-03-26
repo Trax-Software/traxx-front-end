@@ -113,7 +113,7 @@ export function mapApiCampaignToUi(campaign: Campaign): UICampaign {
 }
 
 export function useCampaigns() {
-  const [campaigns, setCampaigns] = useState<UICampaign[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,7 +122,7 @@ export function useCampaigns() {
       setIsLoading(true);
       setError(null);
       const data = await listCampaigns();
-      setCampaigns(data.map(mapApiCampaignToUi));
+      setCampaigns(data);
     } catch (err) {
       console.error(err);
       setError("Não foi possível carregar as campanhas.");
