@@ -2,20 +2,43 @@
 
 import React from "react";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 type TopbarProps = {
   title: string;
   userName?: string;
 };
 
-export default function Topbar({ title, userName = "Murilo" }: TopbarProps) {
+function getUserInitials(name?: string | null, email?: string | null): string {
+  const safeName = name?.trim();
+  if (safeName) {
+    const parts = safeName.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase() || "U";
+    }
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+
+  const safeEmail = email?.trim();
+  if (safeEmail) {
+    const localPart = safeEmail.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, "") ?? "";
+    return localPart.slice(0, 2).toUpperCase() || "U";
+  }
+
+  return "U";
+}
+
+export default function Topbar({ title, userName }: TopbarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const routeTitleMap: Array<{ prefix: string; title: string }> = [
     { prefix: "/admin/dna", title: "DNA da Marca" },
     { prefix: "/admin/assistant", title: "Assistente" },
     { prefix: "/admin/assets", title: "Assets" },
     { prefix: "/admin", title: "Campanhas" },
   ];
+  const resolvedUserName = user?.name ?? user?.email ?? userName ?? "Usuário";
+  const userInitials = getUserInitials(user?.name, user?.email ?? userName);
 
   const resolvedTitle =
     routeTitleMap.find((item) => pathname.startsWith(item.prefix))?.title ?? title;
@@ -33,11 +56,10 @@ export default function Topbar({ title, userName = "Murilo" }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5">
-        <div
-          className="h-8 w-8 rounded-full border-2 border-[var(--bg-surface)]"
-          style={{ background: "var(--brand-gradient)" }}
-        />
-        <span className="text-sm font-semibold text-[var(--text-main)]">{userName}</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-body)] text-xs font-bold text-[var(--text-main)]">
+          {userInitials}
+        </span>
+        <span className="text-sm font-semibold text-[var(--text-main)]">{resolvedUserName}</span>
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bg-body)] text-[var(--text-secondary)]">
           <svg viewBox="0 0 20 20" className="h-3 w-3" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M5 8l5 5 5-5" />

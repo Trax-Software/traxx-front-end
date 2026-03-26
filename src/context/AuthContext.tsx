@@ -1,12 +1,20 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import {AuthUser, signIn, SignInPayload} from "@/app/services/auth";
+import {
+    AuthUser,
+    AuthWorkspace,
+    me,
+    signIn,
+    SignInPayload,
+} from "@/app/services/auth";
+import { ServiceError } from "@/app/services/api";
 
 
 type AuthContextValue = {
     token: string | null;
     user: AuthUser | null;
+    workspace: AuthWorkspace;
     loading: boolean;
     signInWithEmail: (payload: SignInPayload) => Promise<void>;
     signOut: () => void;
@@ -32,13 +40,71 @@ function getCookie(name: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
     const [user, setUser] = useState<AuthUser | null>(null);
+    const [workspace, setWorkspace] = useState<AuthWorkspace>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const t = getCookie("trax_token");
-        if (t) setToken(decodeURIComponent(t));
+        if (t) {
+            setToken(decodeURIComponent(t));
+            return;
+        }
         setLoading(false);
     }, []);
+
+    useEffect(() => {
+        let active = true;
+
+        async function hydrateUser() {
+            if (!token) {
+                if (!active) return;
+                setUser(null);
+                setWorkspace(null);
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const data = await me();
+
+                if (!active) return;
+                setUser(data.user ?? null);
+                setWorkspace(data.workspace ?? null);
+            } catch (error) {
+                const serviceError = error as ServiceError;
+                const isUnauthorized = serviceError.statusCode === 401;
+
+                if (!active) return;
+
+                if (isUnauthorized) {
+                    deleteCookie("trax_token");
+                    setToken(null);
+                    setUser(null);
+                    setWorkspace(null);
+
+                    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+                        window.location.assign("/login");
+                    }
+                    return;
+                }
+
+                setUser(null);
+                setWorkspace(null);
+            } finally {
+                if (active) {
+                    setLoading(false);
+                }
+            }
+        }
+
+        void hydrateUser();
+
+        return () => {
+            active = false;
+        };
+    }, [token]);
 
     async function signInWithEmail(payload: SignInPayload) {
         const data = await signIn(payload);
@@ -52,11 +118,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         deleteCookie("trax_token");
         setToken(null);
         setUser(null);
+        setWorkspace(null);
     }
 
     const value = useMemo(
-        () => ({ token, user, loading, signInWithEmail, signOut }),
-        [token, user, loading]
+        () => ({ token, user, workspace, loading, signInWithEmail, signOut }),
+        [token, user, workspace, loading]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
