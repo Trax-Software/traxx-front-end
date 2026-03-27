@@ -10,6 +10,7 @@ import {
 } from "@/app/services/campaigns";
 import { generateCampaignImage } from "@/app/services/ai";
 import { normalizeApiError } from "@/app/services/api";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   ArrowLeft,
   CheckCircle,
@@ -265,6 +266,8 @@ export default function CampaignDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [isImagePolling, setIsImagePolling] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
   const imagePollingIntervalRef = useRef<number | null>(null);
   const imagePollingTimeoutRef = useRef<number | null>(null);
@@ -422,9 +425,17 @@ export default function CampaignDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Tem certeza que deseja arquivar esta campanha?")) return;
-    await deleteCampaign(id);
-    router.push("/admin");
+    setArchiveDialogOpen(false);
+    setArchiving(true);
+    try {
+      await deleteCampaign(id);
+      router.push("/admin");
+    } catch (err) {
+      const parsedError = normalizeApiError(err);
+      setError(parsedError.message || "Erro ao arquivar campanha.");
+    } finally {
+      setArchiving(false);
+    }
   }
 
   if (loading) {
@@ -545,7 +556,8 @@ export default function CampaignDetailPage() {
           </div>
 
           <button
-            onClick={handleDelete}
+            onClick={() => setArchiveDialogOpen(true)}
+            disabled={archiving}
             className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-4 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--danger-text)] hover:text-[var(--danger-text)]"
           >
             <Trash2 size={14} /> Arquivar
@@ -740,6 +752,26 @@ export default function CampaignDetailPage() {
           </button>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={archiveDialogOpen}
+        title="Confirmar ação"
+        description="Tem certeza que deseja arquivar esta campanha?"
+        confirmText={archiving ? "Arquivando..." : "Arquivar"}
+        cancelText="Cancelar"
+        tone="danger"
+        onCancel={() => {
+          if (!archiving) {
+            setArchiveDialogOpen(false);
+          }
+        }}
+        onConfirm={() => {
+          if (!archiving) {
+            void handleDelete();
+          }
+        }}
+        confirmDisabled={archiving}
+      />
     </div>
   );
 }

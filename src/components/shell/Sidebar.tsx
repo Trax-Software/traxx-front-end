@@ -10,10 +10,11 @@ const navItems = [
   { label: "DNA da Marca", href: "/admin/dna", icon: "fingerprint" },
   { label: "Assistente", href: "/admin/assistant", icon: "robot" },
   { label: "Assets", href: "/admin/assets", icon: "image" },
+  { label: "Integrações", href: "/admin/integrations", icon: "plug" },
 ];
 
 type NavIconProps = {
-  type: "grid" | "fingerprint" | "robot" | "image";
+  type: "grid" | "fingerprint" | "robot" | "image" | "plug";
   className?: string;
 };
 
@@ -54,6 +55,16 @@ function NavIcon({ type, className }: NavIconProps) {
           <rect x="3" y="5" width="18" height="14" rx="2" />
           <path d="m7 14 3-3 4 4 3-3 3 3" />
           <circle cx="9" cy="9" r="1" fill="currentColor" />
+        </svg>
+      );
+    case "plug":
+      return (
+        <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 6V3" />
+          <path d="M15 6V3" />
+          <path d="M8 10h8" />
+          <path d="M8 6h8v5a4 4 0 0 1-4 4h0a4 4 0 0 1-4-4V6Z" />
+          <path d="M12 15v6" />
         </svg>
       );
     default:

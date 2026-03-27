@@ -3,16 +3,17 @@ import { api, toServiceError, unwrap } from "./api";
 // --- Tipos ---
 
 export type AdAccount = {
-  id: string;
+  account_id: string;
   name: string;
   currency?: string;
-  status?: number;
+  account_status?: number | string;
 };
 
 export type FacebookPage = {
   id: string;
   name: string;
   category?: string;
+  access_token?: string;
   picture?: { data: { url: string } };
 };
 
@@ -37,10 +38,10 @@ export const getMetaAuthUrl = async (): Promise<string> => {
   });
 };
 
-export const connectMeta = async (code: string): Promise<{ success: boolean }> => {
+export const connectMeta = async (code: string): Promise<{ message: string }> => {
   return withServiceError(async () => {
     const response = await api.post("/integrations/meta/connect", { code });
-    return unwrap<{ success: boolean }>(response);
+    return unwrap<{ message: string }>(response);
   });
 };
 

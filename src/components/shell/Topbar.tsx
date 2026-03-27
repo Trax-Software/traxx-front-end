@@ -32,6 +32,7 @@ export default function Topbar({ title, userName }: TopbarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const routeTitleMap: Array<{ prefix: string; title: string }> = [
+    { prefix: "/admin/integrations", title: "Integrações" },
     { prefix: "/admin/dna", title: "DNA da Marca" },
     { prefix: "/admin/assistant", title: "Assistente" },
     { prefix: "/admin/assets", title: "Assets" },
