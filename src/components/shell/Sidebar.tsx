@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/contexts/theme-context";
@@ -63,6 +64,10 @@ function NavIcon({ type, className }: NavIconProps) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const logoSrc =
+    theme === "light"
+      ? "/brand/Logo_Trax_horizontal-preto.png"
+      : "/brand/Logo_Trax_horizontal-branco.png";
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin" || pathname === "/admin/";
@@ -72,12 +77,15 @@ export default function Sidebar() {
   return (
     <aside className="flex w-full flex-col gap-6 border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-6 md:h-screen md:w-64 md:flex-shrink-0 md:overflow-y-auto md:border-b-0 md:border-r">
       <div>
-        <div className="mb-8 flex items-center gap-3 text-lg font-extrabold text-[var(--text-main)]">
-          <div
-            className="h-9 w-9 rounded-[10px] shadow-[var(--shadow-brand)]"
-            style={{ background: "var(--brand-gradient)" }}
+        <div className="mb-8">
+          <Image
+            src={logoSrc}
+            alt="TRAX"
+            priority
+            width={140}
+            height={40}
+            className="h-auto w-full max-w-[160px]"
           />
-          Trax.OS
         </div>
         <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
           Navegação

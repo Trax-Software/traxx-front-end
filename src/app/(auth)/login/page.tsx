@@ -1,4 +1,5 @@
 import { LoginForm } from "@/components/auth/LoginForm";
+import Image from "next/image";
 
 export default function LoginPage() {
     return (
@@ -22,7 +23,16 @@ export default function LoginPage() {
                 }}
             >
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
-                    <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.5 }}>TRAX</div>
+                    <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}>
+                        <Image
+                            src="/brand/Logo_Trax-vertical-preto.png"
+                            alt="TRAX"
+                            priority
+                            width={180}
+                            height={180}
+                            style={{ width: "clamp(120px, 32vw, 180px)", height: "auto" }}
+                        />
+                    </div>
                     <h1 style={{ marginTop: 12, fontSize: 22, fontWeight: 800 }}>Bem-vindo(a) de volta</h1>
                     <p style={{ marginTop: 6, opacity: 0.8 }}>Acesse o painel administrativo</p>
                 </div>
