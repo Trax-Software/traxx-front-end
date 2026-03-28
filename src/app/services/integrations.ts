@@ -21,6 +21,12 @@ export type MetaAuthUrlResponse = {
   url: string;
 };
 
+export type MetaIntegrationStatus = {
+  connected: boolean;
+  selectedAdAccountId?: string | null;
+  selectedPageId?: string | null;
+};
+
 // --- API Functions ---
 
 async function withServiceError<T>(executor: () => Promise<T>): Promise<T> {
@@ -56,5 +62,19 @@ export const getPages = async (): Promise<FacebookPage[]> => {
   return withServiceError(async () => {
     const response = await api.get("/integrations/meta/pages");
     return unwrap<FacebookPage[]>(response);
+  });
+};
+
+export const getMetaStatus = async (): Promise<MetaIntegrationStatus> => {
+  return withServiceError(async () => {
+    const response = await api.get("/integrations/meta/status");
+    return unwrap<MetaIntegrationStatus>(response);
+  });
+};
+
+export const setMetaSelection = async (adAccountId: string, pageId: string): Promise<MetaIntegrationStatus> => {
+  return withServiceError(async () => {
+    const response = await api.post("/integrations/meta/select", { adAccountId, pageId });
+    return unwrap<MetaIntegrationStatus>(response);
   });
 };

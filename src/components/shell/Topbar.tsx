@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
@@ -31,6 +31,7 @@ function getUserInitials(name?: string | null, email?: string | null): string {
 export default function Topbar({ title, userName }: TopbarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const topbarRef = useRef<HTMLElement | null>(null);
   const routeTitleMap: Array<{ prefix: string; title: string }> = [
     { prefix: "/admin/integrations", title: "Integrações" },
     { prefix: "/admin/dna", title: "DNA da Marca" },
@@ -44,8 +45,42 @@ export default function Topbar({ title, userName }: TopbarProps) {
   const resolvedTitle =
     routeTitleMap.find((item) => pathname.startsWith(item.prefix))?.title ?? title;
 
+  useEffect(() => {
+    const topbarElement = topbarRef.current;
+    if (!topbarElement || typeof document === "undefined" || typeof window === "undefined") {
+      return;
+    }
+
+    const setTopbarHeightVar = () => {
+      document.documentElement.style.setProperty(
+        "--topbar-height",
+        `${topbarElement.offsetHeight}px`
+      );
+    };
+
+    setTopbarHeightVar();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        setTopbarHeightVar();
+      });
+      observer.observe(topbarElement);
+    }
+
+    window.addEventListener("resize", setTopbarHeightVar);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", setTopbarHeightVar);
+    };
+  }, []);
+
   return (
-    <header className="sticky top-0 z-20 flex flex-col gap-3 bg-[var(--bg-body)] px-6 pt-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between">
+    <header
+      ref={topbarRef}
+      className="sticky top-0 z-20 flex flex-col gap-3 bg-[var(--bg-body)] px-6 pt-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between"
+    >
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-main)]">
           {resolvedTitle}

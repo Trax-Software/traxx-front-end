@@ -18,89 +18,78 @@ type Props = {
 
 export function StrategySelector({ strategies, selectedIndex, onSelect, saving }: Props) {
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <p style={{
-        fontWeight: 600, color: "rgba(255,255,255,0.85)",
-        fontSize: 14, marginBottom: 4,
-      }}>
+    <div className="grid gap-3">
+      <p className="mb-1 text-sm font-semibold text-[var(--text-main)]">
         Escolha a estratégia que melhor representa sua campanha:
       </p>
 
       {strategies.map((s, i) => {
         const isSelected = selectedIndex === i;
+        const strategyText = s.reasoning?.trim() || s.description?.trim() || "";
+        const keyBenefit = s.keyBenefits?.trim();
+        const brandTone = s.brandTone?.trim();
 
         return (
           <button
             key={i}
             onClick={() => !saving && onSelect(i)}
             disabled={saving}
-            style={{
-              background: isSelected
-                ? "rgba(253,143,6,0.18)"
-                : "rgba(255,255,255,0.07)",
-              border: `2px solid ${isSelected ? "#FD8F06" : "rgba(255,255,255,0.15)"}`,
-              borderRadius: 14,
-              padding: "16px 18px",
-              cursor: saving ? "not-allowed" : "pointer",
-              textAlign: "left",
-              transition: "all 0.2s",
-              width: "100%",
-              fontFamily: "inherit",
-            }}
-            onMouseEnter={(e) => {
-              if (!isSelected && !saving)
-                e.currentTarget.style.background = "rgba(255,255,255,0.12)";
-            }}
-            onMouseLeave={(e) => {
-              if (!isSelected)
-                e.currentTarget.style.background = "rgba(255,255,255,0.07)";
-            }}
+            className={`w-full rounded-[14px] border-2 p-4 text-left transition sm:p-[18px] ${
+              isSelected
+                ? "border-[var(--brand-orange)] bg-[var(--bg-surface)] ring-1 ring-[var(--brand-orange)]"
+                : "border-[var(--border)] bg-[var(--bg-body)] hover:border-[var(--brand-orange)]"
+            } ${saving ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
             aria-pressed={isSelected}
           >
-            {/* Título */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                background: isSelected ? "rgba(253,143,6,0.3)" : "rgba(255,255,255,0.1)",
-                display: "grid", placeItems: "center",
-                transition: "background 0.2s",
-              }}>
-                {isSelected
-                  ? <CheckCircle size={13} color="#FD8F06" />
-                  : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "rgba(255,255,255,0.35)", display: "block" }} />
-                }
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <div
+                  className={`grid h-[22px] w-[22px] flex-shrink-0 place-items-center rounded-[6px] ${
+                    isSelected ? "bg-[var(--orange-light)]" : "bg-[var(--bg-surface)]"
+                  }`}
+                >
+                  {isSelected ? (
+                    <CheckCircle size={13} color="var(--brand-orange)" />
+                  ) : (
+                    <span className="block h-2 w-2 rounded-full bg-[var(--text-secondary)]" />
+                  )}
+                </div>
+                <strong className="line-clamp-2 text-[15px] font-bold leading-[1.35] text-[var(--text-main)]">
+                  {s.title}
+                </strong>
               </div>
-              <strong style={{ color: "#fff", fontSize: 14, lineHeight: 1.3 }}>
-                {s.title}
-              </strong>
+              {isSelected ? (
+                <span className="inline-flex flex-shrink-0 rounded-full border border-[var(--brand-orange)] bg-[var(--orange-light)] px-2 py-0.5 text-xs font-semibold text-[var(--brand-orange)]">
+                  Selecionada
+                </span>
+              ) : null}
             </div>
 
-            {/* Descrição */}
-            <p style={{
-              color: "rgba(255,255,255,0.72)", fontSize: 13,
-              lineHeight: 1.6, marginBottom: s.targetAudience || s.keyMessage ? 10 : 0,
-            }}>
-              {s.description}
-            </p>
+            {strategyText ? (
+              <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                {strategyText}
+              </p>
+            ) : null}
 
-            {/* Público + Mensagem chave */}
-            {(s.targetAudience || s.keyMessage) && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {(s.targetAudience || keyBenefit || brandTone || s.keyMessage) && (
+              <div className="mt-3 flex flex-wrap gap-2">
                 {s.targetAudience && (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    background: "rgba(255,255,255,0.08)", borderRadius: 20,
-                    padding: "4px 10px", fontSize: 12, color: "rgba(255,255,255,0.65)",
-                  }}>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
                     <Target size={11} /> {s.targetAudience}
                   </div>
                 )}
+                {keyBenefit ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
+                    <MessageSquare size={11} /> {keyBenefit}
+                  </div>
+                ) : null}
+                {brandTone ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
+                    <MessageSquare size={11} /> Tom: {brandTone}
+                  </div>
+                ) : null}
                 {s.keyMessage && (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    background: "rgba(255,255,255,0.08)", borderRadius: 20,
-                    padding: "4px 10px", fontSize: 12, color: "rgba(255,255,255,0.65)",
-                  }}>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
                     <MessageSquare size={11} /> {s.keyMessage}
                   </div>
                 )}
@@ -111,10 +100,7 @@ export function StrategySelector({ strategies, selectedIndex, onSelect, saving }
       })}
 
       {saving && (
-        <p style={{
-          textAlign: "center", color: "rgba(255,255,255,0.55)",
-          fontSize: 13, paddingTop: 4,
-        }}>
+        <p className="pt-1 text-center text-sm text-[var(--text-secondary)]">
           Aplicando estratégia...
         </p>
       )}

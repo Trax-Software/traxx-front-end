@@ -2,15 +2,21 @@
 
 import {
   Campaign,
+  CopyGenerationFallback,
+  CopyOption,
   StrategyOption,
   brainstormStrategy,
   deleteCampaign,
+  generateCopyOptions,
   getCampaign,
+  publishCampaignToMeta,
   updateCampaign,
 } from "@/app/services/campaigns";
 import { generateCampaignImage } from "@/app/services/ai";
 import { normalizeApiError } from "@/app/services/api";
+import { getMetaStatus, MetaIntegrationStatus } from "@/app/services/integrations";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { FeedbackDialog } from "@/components/ui/FeedbackDialog";
 import {
   ArrowLeft,
   CheckCircle,
@@ -19,12 +25,12 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { CampaignStatusBadge, STATUS_META } from "../components/CampaignStatusBadge";
+import { CopyOptionsSelector } from "../components/CopyOptionsSelector";
 import { StrategySelector } from "../components/StrategySelector";
 
 const STATUS_FLOW: Campaign["status"][] = [
@@ -109,6 +115,33 @@ function displayText(value?: string | number | null) {
   if (typeof value === "number") return String(value);
   const parsed = value.trim();
   return parsed.length ? parsed : "—";
+}
+
+function isStrategyApplied(campaign?: Campaign | null) {
+  if (!campaign) return false;
+  return Boolean(campaign.description?.trim()) && Boolean(campaign.targetAudience?.trim());
+}
+
+function toStrategyDescription(strategy: StrategyOption) {
+  const title = strategy.title?.trim() ?? "";
+  const reasoning = strategy.reasoning?.trim() ?? strategy.description?.trim() ?? "";
+
+  if (title && reasoning) {
+    return `${title}\n\n${reasoning}`;
+  }
+
+  return reasoning || title;
+}
+
+type SelectedCopyStorage = {
+  headline: string;
+  primaryText: string;
+  cta: string;
+  framework?: string;
+};
+
+function getCopySelectionStorageKey(campaignId: string) {
+  return `trax_copy_selected_${campaignId}`;
 }
 
 function StatusTimeline({ current }: { current: Campaign["status"] }) {
@@ -217,42 +250,6 @@ function DefinitionSectionCard({
   );
 }
 
-type NextStepConfig = {
-  description: string;
-  actionLabel?: string;
-  action?: () => Promise<void> | void;
-  disabled?: boolean;
-};
-
-function NextStepCard({
-  config,
-}: {
-  config: NextStepConfig;
-}) {
-  return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--brand-orange)] bg-[var(--orange-light)] p-6 shadow-[var(--shadow-sm)]">
-      <div className="mb-2 flex items-center gap-2">
-        <Zap size={16} className="text-[var(--brand-orange)]" />
-        <h2 className="text-lg font-bold text-[var(--text-main)]">Próximo passo</h2>
-      </div>
-      <p className="text-base leading-relaxed text-[var(--text-main)]">{config.description}</p>
-
-      {config.action && config.actionLabel ? (
-        <button
-          type="button"
-          onClick={() => void config.action?.()}
-          disabled={config.disabled}
-          className="mt-4 inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
-          style={{ background: "var(--brand-gradient)" }}
-        >
-          <Sparkles size={14} />
-          {config.actionLabel}
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -268,9 +265,43 @@ export default function CampaignDetailPage() {
   const [isImagePolling, setIsImagePolling] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishingToMeta, setPublishingToMeta] = useState(false);
+  const [metaStatus, setMetaStatus] = useState<MetaIntegrationStatus | null>(null);
+  const [copyOptions, setCopyOptions] = useState<CopyOption[]>([]);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [copyFallback, setCopyFallback] = useState<CopyGenerationFallback | null>(null);
+  const [selectedCopy, setSelectedCopy] = useState<SelectedCopyStorage | null>(null);
+  const [selectedCopyIndex, setSelectedCopyIndex] = useState<number | null>(null);
+  const [copySelectionHydrated, setCopySelectionHydrated] = useState(false);
+  const [isChoosingCopy, setIsChoosingCopy] = useState(false);
+  const [missingSections, setMissingSections] = useState({
+    strategy: false,
+    copy: false,
+    assets: false,
+  });
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState<{
+    open: boolean;
+    tone: "success" | "danger" | "info";
+    title: string;
+    description: string;
+    autoCloseMs?: number;
+  }>({
+    open: false,
+    tone: "info",
+    title: "",
+    description: "",
+  });
   const [imagePrompt, setImagePrompt] = useState("");
   const imagePollingIntervalRef = useRef<number | null>(null);
   const imagePollingTimeoutRef = useRef<number | null>(null);
+  const strategySectionRef = useRef<HTMLDivElement | null>(null);
+  const strategySelectorRef = useRef<HTMLDivElement | null>(null);
+  const copySectionRef = useRef<HTMLElement | null>(null);
+  const copyOptionsListRef = useRef<HTMLDivElement | null>(null);
+  const assetsSectionRef = useRef<HTMLElement | null>(null);
 
   function stopImagePolling() {
     if (imagePollingIntervalRef.current !== null) {
@@ -336,19 +367,141 @@ export default function CampaignDetailPage() {
     };
   }, [id]);
 
-  async function handleBrainstorm() {
+  useEffect(() => {
+    getMetaStatus()
+      .then(setMetaStatus)
+      .catch(() =>
+        setMetaStatus({
+          connected: false,
+          selectedAdAccountId: null,
+          selectedPageId: null,
+        })
+      );
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storageKey = getCopySelectionStorageKey(id);
+    const rawValue = window.localStorage.getItem(storageKey);
+
+    if (!rawValue) {
+      setSelectedCopy(null);
+      setSelectedCopyIndex(null);
+      setCopySelectionHydrated(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(rawValue) as Partial<SelectedCopyStorage>;
+      if (!parsed.headline || !parsed.primaryText || !parsed.cta) {
+        window.localStorage.removeItem(storageKey);
+        setSelectedCopy(null);
+        setSelectedCopyIndex(null);
+        setCopySelectionHydrated(true);
+        return;
+      }
+
+      setSelectedCopy({
+        headline: parsed.headline,
+        primaryText: parsed.primaryText,
+        cta: parsed.cta,
+        framework: parsed.framework,
+      });
+      setCopySelectionHydrated(true);
+    } catch {
+      window.localStorage.removeItem(storageKey);
+      setSelectedCopy(null);
+      setSelectedCopyIndex(null);
+      setCopySelectionHydrated(true);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!selectedCopy) {
+      setSelectedCopyIndex(null);
+      return;
+    }
+
+    const index = copyOptions.findIndex(
+      (option) =>
+        option.headline === selectedCopy.headline &&
+        option.primaryText === selectedCopy.primaryText &&
+        option.cta === selectedCopy.cta
+    );
+
+    setSelectedCopyIndex(index >= 0 ? index : null);
+  }, [copyOptions, selectedCopy]);
+
+  useEffect(() => {
+    if (!missingSections.strategy && !missingSections.copy && !missingSections.assets) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setMissingSections({ strategy: false, copy: false, assets: false });
+    }, 2500);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [missingSections]);
+
+  useEffect(() => {
+    const strategyMet = isStrategyApplied(campaign);
+    const copyMet = !strategyMet || Boolean(selectedCopy);
+    const requiresAssets = campaign?.status === "GENERATING_ASSETS";
+    const assetsMet =
+      !requiresAssets ||
+      (campaign?.adCreatives?.length ?? 0) > 0 ||
+      (campaign?.adCreatives ?? []).some((creative) => Boolean(creative.imageUrl));
+
+    setMissingSections((prev) => {
+      const next = {
+        strategy: prev.strategy && !strategyMet,
+        copy: prev.copy && !copyMet,
+        assets: prev.assets && !assetsMet,
+      };
+
+      if (
+        next.strategy === prev.strategy &&
+        next.copy === prev.copy &&
+        next.assets === prev.assets
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [campaign, selectedCopy]);
+
+  async function runBrainstormAndReveal() {
     if (!campaign) return;
     setBrainstorming(true);
     setError(null);
     try {
       const options = await brainstormStrategy(id);
       setStrategies(options);
+      setSelectedIdx(null);
       setCampaign((prev) => (prev ? { ...prev, status: "WAITING_APPROVAL" } : prev));
+      if (options.length > 0) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            handleScrollToStrategies();
+          });
+        });
+      }
     } catch {
       setError("Erro ao gerar estratégia. Verifique sua conexão e tente novamente.");
     } finally {
       setBrainstorming(false);
     }
+  }
+
+  async function handleBrainstorm() {
+    await runBrainstormAndReveal();
   }
 
   async function handleSelectStrategy(index: number) {
@@ -358,9 +511,10 @@ export default function CampaignDetailPage() {
     setStrategySaving(true);
     try {
       const updated = await updateCampaign(id, {
-        description: chosen.description,
+        description: toStrategyDescription(chosen),
         targetAudience: chosen.targetAudience,
-        status: "GENERATING_ASSETS",
+        keyBenefits: chosen.keyBenefits,
+        brandTone: chosen.brandTone,
       });
       setCampaign(updated);
       setStrategies([]);
@@ -369,10 +523,88 @@ export default function CampaignDetailPage() {
     }
   }
 
-  function handleRegenerateBrainstorm() {
-    setStrategies([]);
-    setSelectedIdx(null);
-    setError(null);
+  async function handleRegenerateBrainstorm() {
+    await runBrainstormAndReveal();
+  }
+
+  function handleScrollToStrategies() {
+    strategySelectorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleScrollToCopyOptions() {
+    copyOptionsListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleStartChoosingCopy() {
+    if (copyOptions.length === 0) return;
+    setIsChoosingCopy(true);
+    requestAnimationFrame(() => {
+      handleScrollToCopyOptions();
+    });
+  }
+
+  async function handleGenerateCopy() {
+    setCopyLoading(true);
+    setCopyError(null);
+    setCopyFallback(null);
+
+    try {
+      const response = await generateCopyOptions(id);
+
+      if (Array.isArray(response)) {
+        setCopyOptions(response);
+        if (response.length > 0) {
+          setIsChoosingCopy(true);
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              handleScrollToCopyOptions();
+            });
+          });
+        }
+      } else {
+        setCopyOptions([]);
+        setSelectedCopyIndex(null);
+        setCopyFallback(response);
+      }
+    } catch (err) {
+      const parsedError = normalizeApiError(err);
+      if (parsedError.statusCode === 402) {
+        setCopyError(parsedError.message || "Você não possui créditos suficientes para gerar copy.");
+      } else {
+        setCopyError(parsedError.message || "Erro ao gerar variações de copy com IA.");
+      }
+    } finally {
+      setCopyLoading(false);
+    }
+  }
+
+  function handleSelectCopyOption(index: number) {
+    const option = copyOptions[index];
+    if (!option) return;
+
+    const selected: SelectedCopyStorage = {
+      headline: option.headline,
+      primaryText: option.primaryText,
+      cta: option.cta,
+      framework: option.framework,
+    };
+
+    setSelectedCopy(selected);
+    setSelectedCopyIndex(index);
+    setIsChoosingCopy(false);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(getCopySelectionStorageKey(id), JSON.stringify(selected));
+    }
+  }
+
+  function handleClearSelectedCopy() {
+    setSelectedCopy(null);
+    setSelectedCopyIndex(null);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(getCopySelectionStorageKey(id));
+    }
   }
 
   async function handleGenerateImage() {
@@ -419,9 +651,32 @@ export default function CampaignDetailPage() {
     setCampaign(updated);
   }
 
-  async function handlePublish() {
-    const updated = await updateCampaign(id, { status: "PUBLISHED" });
-    setCampaign(updated);
+  async function handlePublishToMeta() {
+    setPublishDialogOpen(false);
+    setPublishingToMeta(true);
+
+    try {
+      await publishCampaignToMeta(id);
+      const latestCampaign = await getCampaign(id);
+      setCampaign(latestCampaign);
+      setFeedbackDialog({
+        open: true,
+        tone: "success",
+        title: "Campanha publicada na Meta",
+        description: "A campanha foi publicada com sucesso.",
+        autoCloseMs: 1500,
+      });
+    } catch (err) {
+      const parsedError = normalizeApiError(err);
+      setFeedbackDialog({
+        open: true,
+        tone: "danger",
+        title: "Não foi possível publicar na Meta",
+        description: parsedError.message || "Tente novamente em instantes.",
+      });
+    } finally {
+      setPublishingToMeta(false);
+    }
   }
 
   async function handleDelete() {
@@ -436,6 +691,10 @@ export default function CampaignDetailPage() {
     } finally {
       setArchiving(false);
     }
+  }
+
+  function scrollToSection(element: HTMLElement | null) {
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   if (loading) {
@@ -461,50 +720,116 @@ export default function CampaignDetailPage() {
 
   const c = campaign!;
 
-  const nextStepConfig: NextStepConfig = (() => {
-    switch (c.status) {
-      case "DRAFT":
-      case "GENERATING_STRATEGY":
-        return {
-          description: "Gere estratégias com IA para avançar para a fase de aprovação.",
-          actionLabel: brainstorming ? "Gerando estratégias..." : "Gerar Estratégias com IA",
-          action: handleBrainstorm,
-          disabled: brainstorming,
-        };
-      case "WAITING_APPROVAL":
-        if (strategies.length > 0) {
-          return {
-            description: "Revise as estratégias geradas abaixo e selecione a melhor opção.",
-          };
-        }
-        return {
-          description: "Nenhuma estratégia carregada no momento. Gere novamente para revisar opções.",
-          actionLabel: brainstorming ? "Gerando estratégias..." : "Gerar Estratégias com IA",
-          action: handleBrainstorm,
-          disabled: brainstorming,
-        };
-      case "GENERATING_ASSETS":
-        return {
-          description: "Aguarde a geração dos assets ou finalize manualmente quando estiver tudo pronto.",
-          actionLabel: "Marcar como Concluída",
-          action: handleMarkCompleted,
-        };
-      case "COMPLETED":
-        return {
-          description: "Campanha concluída. Publique para colocar no ar.",
-          actionLabel: "Publicar Campanha",
-          action: handlePublish,
-        };
-      case "PUBLISHED":
-        return {
-          description: "Campanha publicada com sucesso. Agora acompanhe desempenho e ajuste criativos.",
-        };
-      default:
-        return {
-          description: "Siga para a próxima etapa da campanha.",
-        };
+  const strategyApplied = isStrategyApplied(c);
+  const strategiesLoaded = strategies.length > 0;
+  const strategyGenerationAvailable = true;
+  const copySelected = Boolean(selectedCopy);
+  const strategyRequiredMet = isStrategyApplied(c);
+  const assetsRequiredMet =
+    (c.adCreatives?.length ?? 0) > 0 || (c.adCreatives ?? []).some((creative) => Boolean(creative.imageUrl));
+  const shouldShowCopyOptionsList = !selectedCopy || isChoosingCopy;
+  const hasCreativeForPublish =
+    (c.adCreatives?.length ?? 0) > 0 || (c.adCreatives ?? []).some((creative) => Boolean(creative.imageUrl));
+  const publishRequirements: string[] = [];
+
+  if (!metaStatus?.connected) {
+    publishRequirements.push("Meta não conectada.");
+  }
+  if (metaStatus?.connected && (!metaStatus.selectedAdAccountId || !metaStatus.selectedPageId)) {
+    publishRequirements.push("Conta e página da Meta não selecionadas.");
+  }
+  if (!hasCreativeForPublish) {
+    publishRequirements.push("Adicione pelo menos 1 criativo antes de publicar.");
+  }
+  if (!copySelected) {
+    publishRequirements.push("Selecione um copy antes de publicar.");
+  }
+
+  const canPublishToMeta = publishRequirements.length === 0;
+  const saveButtonLabel =
+    c.status === "GENERATING_ASSETS" || c.status === "COMPLETED" || c.status === "PUBLISHED"
+      ? "Salvar campanha"
+      : !strategyApplied
+        ? "Salvar e continuar"
+      : !copySelected
+        ? "Salvar e avançar para Copy"
+          : c.status === "WAITING_APPROVAL"
+            ? "Salvar e avançar para Criativos"
+            : "Salvar campanha";
+
+  async function handleSave() {
+    let hasCopySelection = copySelected;
+
+    if (!hasCopySelection && typeof window !== "undefined") {
+      hasCopySelection = Boolean(window.localStorage.getItem(getCopySelectionStorageKey(id)));
     }
-  })();
+
+    const copyRequired = strategyRequiredMet;
+    const assetsRequired = c.status === "GENERATING_ASSETS";
+    const nextMissing = {
+      strategy: !strategyRequiredMet,
+      copy: copyRequired && !hasCopySelection,
+      assets: assetsRequired && !assetsRequiredMet,
+    };
+
+    if (nextMissing.strategy || nextMissing.copy || nextMissing.assets) {
+      setMissingSections(nextMissing);
+
+      requestAnimationFrame(() => {
+        if (nextMissing.strategy) {
+          scrollToSection(strategySectionRef.current);
+          return;
+        }
+        if (nextMissing.copy) {
+          scrollToSection(copySectionRef.current);
+          return;
+        }
+        if (nextMissing.assets) {
+          scrollToSection(assetsSectionRef.current);
+        }
+      });
+      return;
+    }
+
+    try {
+      setSaveLoading(true);
+      setError(null);
+      setMissingSections({ strategy: false, copy: false, assets: false });
+
+      let latestCampaign = c;
+      let feedbackMessage = "Suas alterações foram salvas.";
+
+      if (strategyRequiredMet && (latestCampaign.status === "DRAFT" || latestCampaign.status === "GENERATING_STRATEGY")) {
+        latestCampaign = await updateCampaign(id, { status: "WAITING_APPROVAL" });
+        setCampaign(latestCampaign);
+        feedbackMessage = "Suas alterações foram salvas.";
+      }
+
+      if (hasCopySelection && latestCampaign.status === "WAITING_APPROVAL") {
+        latestCampaign = await updateCampaign(id, { status: "GENERATING_ASSETS" });
+        setCampaign(latestCampaign);
+        feedbackMessage = "Suas alterações foram salvas.";
+      }
+
+      setFeedbackDialog({
+        open: true,
+        tone: "success",
+        title: "Campanha salva com sucesso",
+        description: feedbackMessage,
+        autoCloseMs: 1500,
+      });
+    } catch (err) {
+      const parsedError = normalizeApiError(err);
+      setFeedbackDialog({
+        open: true,
+        tone: "danger",
+        title: "Não foi possível salvar",
+        description: parsedError.message || "Tente novamente em instantes.",
+      });
+    } finally {
+      setSaveLoading(false);
+    }
+  }
 
   const strategyItems: DefinitionItem[] = [
     { label: "Descrição", value: displayText(c.description) },
@@ -567,70 +892,260 @@ export default function CampaignDetailPage() {
 
       <StatusTimeline current={c.status} />
 
-      <NextStepCard config={nextStepConfig} />
-
       <div
-        className="rounded-[var(--radius-lg)] border border-[var(--border)] p-5 shadow-[var(--shadow-sm)]"
+        ref={strategySectionRef}
+        className={`rounded-[var(--radius-lg)] p-5 shadow-[var(--shadow-sm)] ${
+          missingSections.strategy
+            ? "border-2 border-[var(--danger-text)]"
+            : "border border-[var(--border)]"
+        }`}
         style={{
           background: "var(--brand-gradient)",
         }}
       >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-[10px] bg-white/15">
-              <Sparkles size={17} className="text-white" />
+        <div
+          className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-[var(--text-main)] shadow-[var(--shadow-sm)] backdrop-blur-[2px] sm:p-5"
+          style={{
+            background: "color-mix(in srgb, var(--bg-surface) 86%, transparent)",
+          }}
+        >
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-[10px] border border-[var(--border)] bg-[var(--bg-body)]">
+                <Sparkles size={17} className="text-[var(--brand-orange)]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-[var(--text-main)]">Estratégia com IA</h2>
+                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">Análise e recomendação de estratégia</p>
+                {missingSections.strategy ? (
+                  <p className="mt-1 text-sm font-semibold text-[var(--danger-text)]">
+                    Selecione uma estratégia para continuar.
+                  </p>
+                ) : null}
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-white">Estratégia com IA</h2>
-              <p className="text-sm leading-relaxed text-white/80">Análise e recomendação de estratégia</p>
-            </div>
+
+            {(strategiesLoaded || strategyApplied) && strategyGenerationAvailable ? (
+              <button
+                onClick={() => {
+                  void handleRegenerateBrainstorm();
+                }}
+                className="inline-flex items-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--bg-body)] px-3 py-1.5 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--brand-orange)]"
+              >
+                <RotateCcw size={12} /> Gerar novamente
+              </button>
+            ) : null}
           </div>
 
-          {strategies.length > 0 ? (
+          {error ? (
+            <div className="mb-4 rounded-[10px] border border-[var(--danger-text)] bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--danger-text)]">
+              {error}
+            </div>
+          ) : null}
+
+          {!strategiesLoaded && !strategyApplied && strategyGenerationAvailable ? (
             <button
-              onClick={handleRegenerateBrainstorm}
-              className="inline-flex items-center gap-2 rounded-[8px] border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white/90 transition hover:bg-white/15"
+              onClick={() => {
+                void handleBrainstorm();
+              }}
+              disabled={brainstorming}
+              className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: "var(--brand-gradient)" }}
             >
-              <RotateCcw size={12} /> Gerar novamente
+              <Sparkles size={14} />
+              {brainstorming ? "Gerando estratégias com IA..." : "Gerar Estratégias com IA"}
+            </button>
+          ) : null}
+
+          {strategiesLoaded ? (
+            <button
+              type="button"
+              onClick={handleScrollToStrategies}
+              className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-3 py-1.5 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--brand-orange)]"
+            >
+              Ver estratégias geradas
+            </button>
+          ) : null}
+
+          {strategiesLoaded ? (
+            <div ref={strategySelectorRef} className="mt-3">
+              <StrategySelector
+                strategies={strategies}
+                selectedIndex={selectedIdx}
+                onSelect={handleSelectStrategy}
+                saving={strategySaving}
+              />
+            </div>
+          ) : null}
+
+          {!strategiesLoaded && strategyApplied ? (
+            <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--success-text)] bg-[var(--success-bg)] px-4 py-3 text-sm leading-relaxed text-[var(--success-text)]">
+              Estratégia aplicada com sucesso. Use “Gerar novamente” se quiser comparar alternativas.
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <section
+        ref={copySectionRef}
+        className={`rounded-[var(--radius-lg)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)] ${
+          missingSections.copy
+            ? "border-2 border-[var(--danger-text)]"
+            : "border border-[var(--border)]"
+        }`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">Copy do Anúncio</h2>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+              Gere variações de texto e selecione a melhor opção.
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+              Copy é o texto do anúncio (headline + texto principal + CTA).
+            </p>
+            {missingSections.copy ? (
+              <p className="mt-1 text-xs font-semibold text-[var(--danger-text)]">
+                Selecione um texto do anúncio (headline + texto + CTA).
+              </p>
+            ) : null}
+          </div>
+
+          {strategyApplied ? (
+            <button
+              type="button"
+              onClick={handleGenerateCopy}
+              disabled={copyLoading}
+              className="inline-flex h-10 items-center justify-center rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: "var(--brand-gradient)" }}
+            >
+              {copyLoading ? "Gerando..." : "Gerar variações com IA"}
             </button>
           ) : null}
         </div>
 
-        {error ? (
-          <div className="mb-4 rounded-[10px] border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
-            {error}
+        {!strategyApplied ? (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+            Primeiro selecione uma estratégia para gerar o copy do anúncio.
           </div>
         ) : null}
 
-        {strategies.length === 0 && c.status !== "GENERATING_ASSETS" && c.status !== "COMPLETED" && c.status !== "PUBLISHED" ? (
-          <button
-            onClick={handleBrainstorm}
-            disabled={brainstorming}
-            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ background: "var(--brand-gradient)" }}
-          >
-            <Sparkles size={14} />
-            {brainstorming ? "Gerando estratégias com IA..." : "Gerar Estratégias com IA"}
-          </button>
+        {selectedCopy ? (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--success-text)] bg-[var(--success-bg)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[var(--success-text)]">✅ Copy selecionado</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateCopy}
+                  disabled={copyLoading || !strategyApplied}
+                  className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Gerar outras variações
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartChoosingCopy}
+                  disabled={copyOptions.length === 0}
+                  className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Trocar seleção
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearSelectedCopy}
+                  className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)]"
+                >
+                  Limpar seleção
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2 text-sm">
+              <p className="text-[var(--text-main)]">
+                <span className="font-semibold">Headline:</span> {selectedCopy.headline}
+              </p>
+              <p className="text-[var(--text-main)]">
+                <span className="font-semibold">Texto:</span> {selectedCopy.primaryText}
+              </p>
+              <p className="text-[var(--text-main)]">
+                <span className="font-semibold">CTA:</span> {selectedCopy.cta}
+              </p>
+            </div>
+            <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">
+              Você pode trocar a seleção quando quiser.
+            </p>
+          </div>
+        ) : copySelectionHydrated ? (
+          <p className="mt-3 break-words text-sm text-[var(--text-secondary)]">Nenhuma variação selecionada</p>
         ) : null}
 
-        {strategies.length > 0 ? (
-          <div className="mt-3">
-            <StrategySelector
-              strategies={strategies}
-              selectedIndex={selectedIdx}
-              onSelect={handleSelectStrategy}
-              saving={strategySaving}
+        {copyError ? (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--danger-text)] bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--danger-text)]">
+            {copyError}
+          </div>
+        ) : null}
+
+        {copyFallback ? (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] p-3">
+            <p className="text-sm font-semibold text-[var(--danger-text)]">
+              {copyFallback.error || "Não foi possível gerar variações estruturadas no momento."}
+            </p>
+            {copyFallback.rawContent ? (
+              <details className="mt-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] p-2">
+                <summary className="cursor-pointer text-xs font-semibold text-[var(--text-secondary)]">
+                  Ver conteúdo retornado
+                </summary>
+                <pre className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-[var(--text-secondary)]">
+                  {copyFallback.rawContent}
+                </pre>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+
+        {shouldShowCopyOptionsList && copyOptions.length > 0 ? (
+          <div ref={copyOptionsListRef} className="mt-4">
+            {selectedCopy && isChoosingCopy ? (
+              <div className="mb-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsChoosingCopy(false)}
+                  className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-body)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)]"
+                >
+                  Cancelar troca
+                </button>
+              </div>
+            ) : null}
+            <CopyOptionsSelector
+              options={copyOptions}
+              selectedIndex={selectedCopyIndex}
+              onSelect={handleSelectCopyOption}
+              loading={copyLoading}
             />
           </div>
         ) : null}
 
-        {strategies.length === 0 && (c.status === "GENERATING_ASSETS" || c.status === "COMPLETED" || c.status === "PUBLISHED") ? (
-          <div className="mt-2 rounded-[var(--radius-md)] border border-white/20 bg-white/10 px-4 py-3 text-sm leading-relaxed text-white/90">
-            Estratégia aplicada com sucesso. Você pode gerar novas opções se quiser comparar alternativas.
+        {shouldShowCopyOptionsList &&
+        !copyLoading &&
+        !copyFallback &&
+        copyOptions.length === 0 &&
+        !selectedCopy &&
+        copySelectionHydrated ? (
+          <div className="mt-4 rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--bg-body)] p-4">
+            <div className="flex items-start gap-3">
+              <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)]">
+                <Sparkles size={14} className="text-[var(--brand-orange)]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-main)]">Nenhuma variação ainda</h3>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                  Gere variações com IA e selecione a melhor opção para usar no anúncio.
+                </p>
+              </div>
+            </div>
           </div>
         ) : null}
-      </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <DefinitionSectionCard
@@ -651,7 +1166,14 @@ export default function CampaignDetailPage() {
         items={offerItems}
       />
 
-      <section className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)]">
+      <section
+        ref={assetsSectionRef}
+        className={`rounded-[var(--radius-lg)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)] ${
+          missingSections.assets
+            ? "border-2 border-[var(--danger-text)]"
+            : "border border-[var(--border)]"
+        }`}
+      >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
           <div className="flex items-center gap-2">
             <ImageIcon size={16} className="text-[var(--brand-orange)]" />
@@ -660,6 +1182,9 @@ export default function CampaignDetailPage() {
               {c.adCreatives?.length ?? 0}
             </span>
           </div>
+          {missingSections.assets ? (
+            <p className="text-xs font-semibold text-[var(--danger-text)]">Gere ou envie pelo menos 1 criativo.</p>
+          ) : null}
         </div>
 
         {c.status === "GENERATING_ASSETS" ? (
@@ -744,15 +1269,59 @@ export default function CampaignDetailPage() {
       {c.status === "COMPLETED" ? (
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <button
-            onClick={handlePublish}
-            className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)]"
+            onClick={() => setPublishDialogOpen(true)}
+            disabled={!canPublishToMeta || publishingToMeta}
+            className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] disabled:cursor-not-allowed disabled:opacity-60"
             style={{ background: "var(--brand-gradient)" }}
           >
-            <Megaphone size={14} /> Publicar Campanha
+            <Megaphone size={14} /> {publishingToMeta ? "Publicando..." : "Publicar na Meta"}
           </button>
+          {publishRequirements.length > 0 ? (
+            <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-body)] px-3 py-2">
+              {publishRequirements.map((message) => (
+                <p key={message} className="text-sm text-[var(--text-secondary)]">
+                  {message}
+                </p>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
+      <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-[var(--text-secondary)]">Revise os blocos acima e finalize o fluxo da campanha.</div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveLoading}
+            className="inline-flex h-10 w-full items-center justify-center rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-brand)] sm:w-auto"
+            style={{ background: "var(--brand-gradient)" }}
+          >
+            {saveLoading ? "Salvando..." : saveButtonLabel}
+          </button>
+        </div>
+      </section>
+
+      <ConfirmDialog
+        open={publishDialogOpen}
+        title="Confirmar ação"
+        description="Publicar campanha na Meta agora?"
+        confirmText={publishingToMeta ? "Publicando..." : "Publicar"}
+        cancelText="Cancelar"
+        tone="primary"
+        onCancel={() => {
+          if (!publishingToMeta) {
+            setPublishDialogOpen(false);
+          }
+        }}
+        onConfirm={() => {
+          if (!publishingToMeta) {
+            void handlePublishToMeta();
+          }
+        }}
+        confirmDisabled={publishingToMeta}
+      />
       <ConfirmDialog
         open={archiveDialogOpen}
         title="Confirmar ação"
@@ -771,6 +1340,16 @@ export default function CampaignDetailPage() {
           }
         }}
         confirmDisabled={archiving}
+      />
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        tone={feedbackDialog.tone}
+        title={feedbackDialog.title}
+        description={feedbackDialog.description}
+        autoCloseMs={feedbackDialog.autoCloseMs}
+        onClose={() => {
+          setFeedbackDialog((prev) => ({ ...prev, open: false }));
+        }}
       />
     </div>
   );

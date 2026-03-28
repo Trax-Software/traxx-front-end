@@ -6,24 +6,13 @@ import {
   FacebookPage,
   getAdAccounts,
   getMetaAuthUrl,
+  getMetaStatus,
   getPages,
+  MetaIntegrationStatus,
+  setMetaSelection,
 } from "@/app/services/integrations";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-
-type SelectedAdAccount = {
-  account_id: string;
-  name: string;
-  currency?: string | null;
-};
-
-type SelectedPage = {
-  id: string;
-  name: string;
-  category?: string | null;
-};
-
-const AD_ACCOUNT_STORAGE_KEY = "trax_meta_selected_ad_account";
-const PAGE_STORAGE_KEY = "trax_meta_selected_page";
+import { FeedbackDialog } from "@/components/ui/FeedbackDialog";
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -54,16 +43,29 @@ function formatAccountStatus(status: AdAccount["account_status"]) {
 export default function IntegrationsPage() {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [pages, setPages] = useState<FacebookPage[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
+  const [metaStatus, setMetaStatus] = useState<MetaIntegrationStatus | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [selectedAdAccount, setSelectedAdAccount] = useState<SelectedAdAccount | null>(null);
-  const [selectedPage, setSelectedPage] = useState<SelectedPage | null>(null);
+  const [selectedAdAccountId, setSelectedAdAccountId] = useState<string | null>(null);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [adCopyFeedback, setAdCopyFeedback] = useState<string | null>(null);
   const [pageCopyFeedback, setPageCopyFeedback] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"connect" | "reconnect" | null>(null);
+  const [feedbackDialog, setFeedbackDialog] = useState<{
+    open: boolean;
+    tone: "success" | "danger" | "info";
+    title: string;
+    description: string;
+    autoCloseMs?: number;
+  }>({
+    open: false,
+    tone: "info",
+    title: "",
+    description: "",
+  });
   const adCopyTimerRef = useRef<number | null>(null);
   const pageCopyTimerRef = useRef<number | null>(null);
 
@@ -75,15 +77,31 @@ export default function IntegrationsPage() {
     }
 
     try {
-      const [accountsResponse, pagesResponse] = await Promise.all([getAdAccounts(), getPages()]);
-      setAdAccounts(accountsResponse);
-      setPages(pagesResponse);
-      setIsConnected(true);
+      const statusResponse = await getMetaStatus();
+      setMetaStatus(statusResponse);
+      setSelectedAdAccountId(statusResponse.selectedAdAccountId ?? null);
+      setSelectedPageId(statusResponse.selectedPageId ?? null);
+
+      if (statusResponse.connected) {
+        const [accountsResponse, pagesResponse] = await Promise.all([getAdAccounts(), getPages()]);
+        setAdAccounts(accountsResponse);
+        setPages(pagesResponse);
+      } else {
+        setAdAccounts([]);
+        setPages([]);
+      }
+
       setLoadError(null);
     } catch (error) {
       setAdAccounts([]);
       setPages([]);
-      setIsConnected(false);
+      setMetaStatus({
+        connected: false,
+        selectedAdAccountId: null,
+        selectedPageId: null,
+      });
+      setSelectedAdAccountId(null);
+      setSelectedPageId(null);
 
       if (showError) {
         setLoadError(getErrorMessage(error, "Não foi possível carregar dados da Meta."));
@@ -96,29 +114,6 @@ export default function IntegrationsPage() {
   useEffect(() => {
     void loadMetaData(false);
   }, [loadMetaData]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    function readStorageValue<T>(key: string): T | null {
-      const rawValue = window.localStorage.getItem(key);
-      if (!rawValue) {
-        return null;
-      }
-
-      try {
-        return JSON.parse(rawValue) as T;
-      } catch {
-        window.localStorage.removeItem(key);
-        return null;
-      }
-    }
-
-    setSelectedAdAccount(readStorageValue<SelectedAdAccount>(AD_ACCOUNT_STORAGE_KEY));
-    setSelectedPage(readStorageValue<SelectedPage>(PAGE_STORAGE_KEY));
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -174,12 +169,12 @@ export default function IntegrationsPage() {
   }
 
   async function handleCopyAdAccountId() {
-    if (!selectedAdAccount) {
+    if (!selectedAdAccountId) {
       return;
     }
 
     try {
-      await copyTextWithFallback(selectedAdAccount.account_id);
+      await copyTextWithFallback(selectedAdAccountId);
       setAdCopyFeedback("Copiado!");
       if (adCopyTimerRef.current) {
         window.clearTimeout(adCopyTimerRef.current);
@@ -199,12 +194,12 @@ export default function IntegrationsPage() {
   }
 
   async function handleCopyPageId() {
-    if (!selectedPage) {
+    if (!selectedPageId) {
       return;
     }
 
     try {
-      await copyTextWithFallback(selectedPage.id);
+      await copyTextWithFallback(selectedPageId);
       setPageCopyFeedback("Copiado!");
       if (pageCopyTimerRef.current) {
         window.clearTimeout(pageCopyTimerRef.current);
@@ -223,41 +218,51 @@ export default function IntegrationsPage() {
     }
   }
 
-  function handleSelectAdAccount(account: AdAccount) {
-    const nextSelection: SelectedAdAccount = {
-      account_id: account.account_id,
-      name: account.name,
-      currency: account.currency ?? null,
-    };
-    setSelectedAdAccount(nextSelection);
+  async function persistMetaSelection(adAccountId: string, pageId: string) {
+    try {
+      setIsSavingSelection(true);
+      await setMetaSelection(adAccountId, pageId);
+      setFeedbackDialog({
+        open: true,
+        tone: "success",
+        title: "Seleção salva",
+        description: "Conta de anúncio e página vinculadas com sucesso.",
+        autoCloseMs: 1500,
+      });
+      await loadMetaData(false);
+    } catch (error) {
+      setFeedbackDialog({
+        open: true,
+        tone: "danger",
+        title: "Não foi possível salvar seleção",
+        description: getErrorMessage(error, "Tente novamente em instantes."),
+      });
+    } finally {
+      setIsSavingSelection(false);
+    }
+  }
 
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(AD_ACCOUNT_STORAGE_KEY, JSON.stringify(nextSelection));
+  function handleSelectAdAccount(account: AdAccount) {
+    const nextAdAccountId = account.account_id;
+    setSelectedAdAccountId(nextAdAccountId);
+
+    if (selectedPageId) {
+      void persistMetaSelection(nextAdAccountId, selectedPageId);
     }
   }
 
   function handleSelectPage(page: FacebookPage) {
-    const nextSelection: SelectedPage = {
-      id: page.id,
-      name: page.name,
-      category: page.category ?? null,
-    };
-    setSelectedPage(nextSelection);
+    const nextPageId = page.id;
+    setSelectedPageId(nextPageId);
 
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(PAGE_STORAGE_KEY, JSON.stringify(nextSelection));
+    if (selectedAdAccountId) {
+      void persistMetaSelection(selectedAdAccountId, nextPageId);
     }
   }
 
-  function handleClearSelection() {
-    setSelectedAdAccount(null);
-    setSelectedPage(null);
-
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(AD_ACCOUNT_STORAGE_KEY);
-      window.localStorage.removeItem(PAGE_STORAGE_KEY);
-    }
-  }
+  const isConnected = Boolean(metaStatus?.connected);
+  const selectedAdAccount = adAccounts.find((account) => account.account_id === selectedAdAccountId) ?? null;
+  const selectedPage = pages.find((page) => page.id === selectedPageId) ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -299,24 +304,14 @@ export default function IntegrationsPage() {
             <p className="mt-3 text-sm text-[var(--danger-text)]">{connectionError}</p>
           ) : null}
 
-          {selectedAdAccount || selectedPage ? (
-            <button
-              type="button"
-              onClick={handleClearSelection}
-              className="mt-3 inline-flex rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-body)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:text-[var(--text-main)]"
-            >
-              Limpar seleção
-            </button>
-          ) : null}
-
           <div className="mt-3 flex flex-col gap-2 text-xs text-[var(--text-secondary)]">
             <div className="flex flex-wrap items-center gap-2">
               <p className="break-words">
-                {selectedAdAccount
-                  ? `Conta selecionada: ${selectedAdAccount.name} (${selectedAdAccount.account_id})`
+                {selectedAdAccountId
+                  ? `Conta selecionada: ${selectedAdAccount?.name ?? selectedAdAccountId} (${selectedAdAccountId})`
                   : "Nenhuma conta selecionada"}
               </p>
-              {selectedAdAccount ? (
+              {selectedAdAccountId ? (
                 <button
                   type="button"
                   onClick={handleCopyAdAccountId}
@@ -331,11 +326,11 @@ export default function IntegrationsPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="break-words">
-                {selectedPage
-                  ? `Página selecionada: ${selectedPage.name} (${selectedPage.id})`
+                {selectedPageId
+                  ? `Página selecionada: ${selectedPage?.name ?? selectedPageId} (${selectedPageId})`
                   : "Nenhuma página selecionada"}
               </p>
-              {selectedPage ? (
+              {selectedPageId ? (
                 <button
                   type="button"
                   onClick={handleCopyPageId}
@@ -377,11 +372,12 @@ export default function IntegrationsPage() {
                           <button
                             type="button"
                             onClick={() => handleSelectAdAccount(account)}
-                            className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-body)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)]"
+                            disabled={isSavingSelection}
+                            className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-body)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Selecionar
+                            {isSavingSelection && selectedAdAccountId === account.account_id ? "Salvando..." : "Selecionar"}
                           </button>
-                          {selectedAdAccount?.account_id === account.account_id ? (
+                          {selectedAdAccountId === account.account_id ? (
                             <span className="inline-flex rounded-full bg-[var(--orange-light)] px-2 py-1 text-xs font-semibold text-[var(--brand-orange)]">
                               Selecionado
                             </span>
@@ -410,11 +406,12 @@ export default function IntegrationsPage() {
                           <button
                             type="button"
                             onClick={() => handleSelectPage(page)}
-                            className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-body)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)]"
+                            disabled={isSavingSelection}
+                            className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-body)] px-2.5 py-1 text-xs font-semibold text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Selecionar
+                            {isSavingSelection && selectedPageId === page.id ? "Salvando..." : "Selecionar"}
                           </button>
-                          {selectedPage?.id === page.id ? (
+                          {selectedPageId === page.id ? (
                             <span className="inline-flex rounded-full bg-[var(--orange-light)] px-2 py-1 text-xs font-semibold text-[var(--brand-orange)]">
                               Selecionado
                             </span>
@@ -447,6 +444,16 @@ export default function IntegrationsPage() {
         onCancel={() => setPendingAction(null)}
         onConfirm={() => {
           void handleConfirmConnectMeta();
+        }}
+      />
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        tone={feedbackDialog.tone}
+        title={feedbackDialog.title}
+        description={feedbackDialog.description}
+        autoCloseMs={feedbackDialog.autoCloseMs}
+        onClose={() => {
+          setFeedbackDialog((prev) => ({ ...prev, open: false }));
         }}
       />
     </div>

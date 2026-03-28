@@ -88,8 +88,11 @@ export type UpdateCampaignDto = Partial<CreateCampaignDto> & {
 
 export type StrategyOption = {
   title: string;
-  description: string;
+  description?: string;
   targetAudience?: string;
+  keyBenefits?: string;
+  brandTone?: string;
+  reasoning?: string;
   keyMessage?: string;
 };
 
@@ -137,6 +140,13 @@ export async function deleteCampaign(id: string): Promise<void> {
   });
 }
 
+export async function publishCampaignToMeta(id: string): Promise<Campaign> {
+  return withServiceError(async () => {
+    const response = await api.post(`/campaigns/${id}/publish/meta`);
+    return unwrap<Campaign>(response);
+  });
+}
+
 export async function brainstormStrategy(id: string): Promise<StrategyOption[]> {
   return withServiceError(async () => {
     const response = await api.post(`/campaigns/${id}/brainstorm`);
@@ -148,13 +158,20 @@ export type CopyOption = {
   headline: string;
   primaryText: string;
   cta: string;
-  framework: string;
-  reasoning: string;
+  framework?: string;
+  reasoning?: string;
 };
 
-export async function generateCopyOptions(id: string): Promise<CopyOption[]> {
+export type CopyGenerationFallback = {
+  error?: string;
+  rawContent?: string;
+};
+
+export async function generateCopyOptions(
+  id: string
+): Promise<CopyOption[] | CopyGenerationFallback> {
   return withServiceError(async () => {
     const response = await api.post(`/campaigns/${id}/generate-copy`);
-    return unwrap<CopyOption[]>(response);
+    return unwrap<CopyOption[] | CopyGenerationFallback>(response);
   });
 }
